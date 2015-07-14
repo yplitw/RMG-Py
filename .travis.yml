@@ -19,22 +19,25 @@ before_install:
   - chmod +x miniconda.sh
   - ./miniconda.sh -b -p $HOME/miniconda
   - export PATH=$HOME/miniconda/bin:$PATH
-  - export PYTHONPATH=$TRAVIS_BUILD_DIR/RMG-Py:$PYTHONPATH
+
   # Update conda itself
   - conda update --yes conda
-  - cd ..
-  - git clone https://github.com/ReactionMechanismGenerator/RMG-database.git
-  - cd RMG-Py
 
 install:
-  - conda env create -f environment_linux.yml
-  - source activate rmg_env
-  - yes 'Yes' | $HOME/miniconda/envs/rmg_env/bin/mopac $MOPACKEY > /dev/null
-  - make
+  # Install the RMG binaries currently on anaconda.org
+  - conda install -c rmg -y rmg rmgdatabase
+  - yes 'Yes' | $HOME/miniconda/bin/mopac $MOPACKEY > /dev/null
 
 script: 
-  - make test
-  - make test-database
+  #- make test
+  #- make test-database
+  - rmg.py examples/rmg/minimal/input.py
+  - rmg.py examples/rmg/1,3-hexadiene/input.py
+  - rmg.py examples/rmg/liquid_phase/input.py
+  - scripts/thermoEstimator.py examples/thermoEstimator/input.py
+  - rmg.py examples/rmg/heptane-eg5/input.py
+  - rmg.py examples/rmg/ethane-oxidation/input.py
+  - rmg.py examples/rmg/gri_mech_rxn_lib/input.py
 
-after_success:
-  - bash ./deploy.sh
+#after_success:
+#  - bash ./deploy.sh
