@@ -1361,6 +1361,23 @@ class ThermoDatabase(object):
             for H, bond in added[atom]:
                 thermoData.H298.value_si -= 52.103 * 4184
 
+        # Remove all of the interactions of the saturated structure. Then add the interactions of the radical.
+        # Take C1=CC=C([O])C(O)=C1 as an example, we need to remove the interation of OH-OH, then add the interaction of Oj-OH.
+        # For now, we only apply this part to cyclic structure because we only have radical interaction data for aromatic radical.
+        if saturatedStruct.isCyclic():
+            SSSR = saturatedStruct.getSmallestSetOfSmallestRings()
+            for ring in SSSR:
+                for atomPair in itertools.permutations(ring, 2):
+                    try:
+                        self.__removeGroupThermoData(thermoData,self.groups['longDistanceInteraction_cyclic'], saturatedStruct, {'*1':atomPair[0], '*2':atomPair[1]})
+                    except KeyError: pass
+            SSSR = molecule.getSmallestSetOfSmallestRings()
+            for ring in SSSR:
+                for atomPair in itertools.permutations(ring, 2):
+                    try:
+                        self.__addGroupThermoData(thermoData,self.groups['longDistanceInteraction_cyclic'], molecule, {'*1':atomPair[0], '*2':atomPair[1]})
+                    except KeyError: pass
+
         return thermoData
         
         
