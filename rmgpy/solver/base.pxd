@@ -75,14 +75,15 @@ cdef class ReactionSystem(DASx):
     cdef public numpy.ndarray edgeReactionRates
 
     cdef public numpy.ndarray networkLeakRates    
-
+    cdef public numpy.ndarray coreSpeciesMetricMatrix
+    
     # variables that cache maximum rate (ratio) data
     cdef public numpy.ndarray maxCoreSpeciesRates
     cdef public numpy.ndarray maxEdgeSpeciesRates
     cdef public numpy.ndarray maxNetworkLeakRates
     cdef public numpy.ndarray maxEdgeSpeciesRateRatios
     cdef public numpy.ndarray maxNetworkLeakRateRatios
-
+    cdef public numpy.ndarray maxCoreSpeciesMetrics
     # sensitivity variables
     # cdef public int sensmethod
     cdef public numpy.ndarray sensitivityCoefficients
@@ -112,6 +113,6 @@ cdef class ReactionSystem(DASx):
         sensitivityAbsoluteTolerance=?, sensitivityRelativeTolerance=?, sensWorksheet=?,
         filterReactions=?)
 
-    cpdef logRates(self, double charRate, object species, double speciesRate, double maxDifLnAccumNum, object network, double networkRate)
+    cpdef logRates(self, double charRate, object species, double speciesRate, double maxDifLnAccumNum, double maxSpeciesMetric, object network, double networkRate)
      
     cpdef logConversions(self, speciesIndex, y0)

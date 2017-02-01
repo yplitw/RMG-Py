@@ -135,6 +135,7 @@ cdef class ReactionSystem(DASx):
 
         self.networkLeakRates = None
 
+        
         # variables that cache maximum rate (ratio) data
         self.maxCoreSpeciesRates = None
         self.maxEdgeSpeciesRates = None
@@ -142,6 +143,9 @@ cdef class ReactionSystem(DASx):
         self.maxEdgeSpeciesRateRatios = None
         self.maxNetworkLeakRateRatios = None
 
+        self.coreSpeciesMetricMatrix = None
+        self.maxCoreSpeciesMetrics = None
+        
         # sensitivity variables
         self.sensmethod = 2 # sensmethod = 1 for staggered corrector sensitivities, 0 (simultaneous corrector), 2 (staggered direct)
         self.sensitivityCoefficients = None    
@@ -205,6 +209,7 @@ cdef class ReactionSystem(DASx):
         self.coreSpeciesConsumptionRates = numpy.zeros((self.numCoreSpecies), numpy.float64)
         self.coreReactionRates = numpy.zeros((self.numCoreReactions), numpy.float64)
         self.edgeReactionRates = numpy.zeros((self.numEdgeReactions), numpy.float64)
+        #self.maxCoreSpeciesMetrics = numpy.zeros((self.numEdgeSpecies), numpy.float64)
         self.coreSpeciesRates = numpy.zeros((self.numCoreSpecies), numpy.float64)
         self.edgeSpeciesRates = numpy.zeros((self.numEdgeSpecies), numpy.float64)
         self.networkLeakRates = numpy.zeros((self.numPdepNetworks), numpy.float64)
@@ -217,6 +222,8 @@ cdef class ReactionSystem(DASx):
         self.unimolecularThreshold = numpy.zeros((self.numCoreSpecies), bool)
         self.bimolecularThreshold = numpy.zeros((self.numCoreSpecies, self.numCoreSpecies), bool)
         
+        self.maxCoreSpeciesMetrics = numpy.zeros((self.numCoreSpecies),numpy.float64)
+        self.coreSpeciesMetricMatrix = numpy.matrix(numpy.zeros((self.numCoreSpecies,self.numCoreSpecies), numpy.float64))
 
     def initialize_solver(self):
         DASx.initialize(self, self.t0, self.y0, self.dydt0, self.senpar, self.atol_array, self.rtol_array)
@@ -368,13 +375,14 @@ cdef class ReactionSystem(DASx):
         cdef int numCoreSpecies, numEdgeSpecies, numPdepNetworks, numCoreReactions
         cdef double stepTime, charRate, maxSpeciesRate, maxNetworkRate, maxEdgeReactionAccum
         cdef numpy.ndarray[numpy.float64_t, ndim=1] y0 #: Vector containing the number of moles of each species
-        cdef numpy.ndarray[numpy.float64_t, ndim=1] coreSpeciesRates, edgeSpeciesRates, networkLeakRates, coreSpeciesProductionRates, coreSpeciesConsumptionRates, totalDivAccumNums
-        cdef numpy.ndarray[numpy.float64_t, ndim=1] maxCoreSpeciesRates, maxEdgeSpeciesRates, maxNetworkLeakRates,maxEdgeSpeciesRateRatios, maxNetworkLeakRateRatios
+        cdef numpy.ndarray[numpy.float64_t, ndim=1] coreSpeciesRates, edgeSpeciesRates, networkLeakRates, coreSpeciesProductionRates, coreSpeciesConsumptionRates#, totalDivAccumNums
+        cdef numpy.ndarray[numpy.float64_t, ndim=1] maxCoreSpeciesRates, maxEdgeSpeciesRates, maxNetworkLeakRates,maxEdgeSpeciesRateRatios, maxNetworkLeakRateRatios, edgeSpeciesMetrics, aVec
+        cdef numpy.ndarray[numpy.float64_t, ndim=2] coreSpeciesMetricMatrix, A
         cdef bint terminated
         cdef object maxSpecies, maxNetwork, 
-        cdef int i, j, k
+        cdef int i, j, k, index1, index2
         cdef numpy.ndarray[numpy.float64_t, ndim=1] forwardRateCoefficients, coreSpeciesConcentrations
-        cdef double  prevTime, totalMoles, c, volume, RTP, unimolecularThresholdVal, bimolecularThresholdVal
+        cdef double  prevTime, totalMoles, c, volume, RTP, unimolecularThresholdVal, bimolecularThresholdVal, temp
         cdef bool zeroProduction, zeroConsumption
         cdef numpy.ndarray[numpy.float64_t, ndim=1] edgeReactionRates
         cdef double reactionRate, production, consumption
@@ -473,8 +481,11 @@ cdef class ReactionSystem(DASx):
             edgeSpeciesRates = numpy.abs(self.edgeSpeciesRates)
             networkLeakRates = numpy.abs(self.networkLeakRates)
             edgeSpeciesRateRatios = numpy.abs(self.edgeSpeciesRates/charRate)
+            coreSpeciesRateRatios = numpy.abs(self.coreSpeciesProductionRates/charRate)
             networkLeakRateRatios = numpy.abs(self.networkLeakRates/charRate)
             numEdgeReactions = self.numEdgeReactions
+            coreSpeciesMetricMatrix = self.coreSpeciesMetricMatrix
+            coreReactionRates = self.coreReactionRates
             
             # Update the maximum species rate and maximum network leak rate arrays
             for index in xrange(numCoreSpecies):
@@ -493,82 +504,137 @@ cdef class ReactionSystem(DASx):
                 if maxNetworkLeakRateRatios[index] < networkLeakRateRatios[index]:
                     maxNetworkLeakRateRatios[index] = networkLeakRateRatios[index]
             
+            for index1 in xrange(numCoreSpecies):
+                for index2 in xrange(numCoreSpecies):
+                    production = 0
+                    consumption = 0
+                    for index in xrange(numCoreReactions):
+                        if index1 in self.reactantIndices[index,:] or index1 in self.productIndicies[index,:]:
+                            if index2 in self.reactantIndices[index,:]:
+                                consumption += coreReactionRates[index]* self.reactantIndices[index,:].count(index1)
+                            if index2 in self.productIndices[index,:]:
+                                production += coreReactionRates[index]* self.productIndices[index,:].count(index1)
+                    if coreSpeciesProductionRates[index1] == production and coreSpeciesConsumptionRates[index1] == consumption:
+                        coreSpeciesMetricMatrix[index1,index2] = 0.0 #...
+                    elif coreSpeciesProductionRates[index1] == 0:
+                        coreSpeciesMetricMatrix[index1,index2] = abs(numpy.log(coreSpeciesConsumptionRates[index1]/(coreSpeciesConsumptionRates[index1]-consumption)))
+                    elif coreSpeciesConsumptionRates[index1] == 0:
+                        coreSpeciesMetricMatrix[index1,index2] = abs(numpy.log(coreSpeciesProductionRates[index1]/(coreSpeciesProductionRates[index1]-production)))
+                    else:
+                        coreSpeciesMetricMatrix[index1,index2] = abs(numpy.log(coreSpeciesProductionRates[index1]/(coreSpeciesProductionRates[index1]-production)))+abs(numpy.log(coreSpeciesConsumptionRates[index1]/(coreSpeciesConsumptionRates[index1]-consumption)))
+            
+            aVec = -toleranceReactionMoveToCore*numpy.log(coreSpeciesRateRatios)
+            A = coreSpeciesMetricMatrix-numpy.matrix.identity(numCoreSpecies)
+            coreSpeciesMetrics = numpy.linalg.solve(A,aVec)
+            totalCoreSpeciesMetric = coreSpeciesMetrics.sum()
+            coreSpeciesMetrics = coreSpeciesMetrics/totalCoreSpeciesMetric #normalization
+            
+#            for index in xrange(numCoreSpecies):
+#                if self.maxCoreSpeciesMetrics[index] > coreSpeciesMetrics[index]:
+#                    self.maxCoreSpeciesMetrics[index] = coreSpeciesMetrics[index]
+            edgeSpeciesMetrics = numpy.zeros((numEdgeSpecies),numpy.float64)
+            
+            for index1 in xrange(numEdgeSpecies):
+                for index2 in xrange(numCoreSpecies):
+                    production = 0
+                    consumption = 0
+                    for index in xrange(numCoreReactions,numCoreReactions+numEdgeReactions):
+                        if index1 in self.reactantIndicies[index,:] or index1 in self.productIndicies[index,:]:
+                            if index2 in self.reactantIndicies[index,:]:
+                                consumption += edgeReactionRates[index-numCoreReactions]* self.reactantIndicies[index,:].count(index1)
+                            if index2 in self.productIndicies[index,:]:
+                                production += edgeReactionRates[index-numCoreReactions]* self.productIndicies[index,:].count(index1)
+                    edgeSpeciesMetrics[index1]  += coreSpeciesMetrics[index2]*(abs(numpy.log(coreSpeciesProductionRates[index1]/(coreSpeciesProductionRates[index1]-production)))+abs(numpy.log(coreSpeciesConsumptionRates[index1]/(coreSpeciesConsumptionRates[index1]-consumption))))
+            
+            edgeSpeciesMetrics = edgeSpeciesMetrics/totalCoreSpeciesMetric #normalization
+            
+        
             #get abs(delta(Ln(total accumulation numbers))) (accumulation number=Production/Consumption)
             #(the natural log operation is avoided until after the maximum accumulation number is found)
-            totalDivAccumNums = numpy.ones(numEdgeReactions)
-            for index in xrange(numEdgeReactions):
-                reactionRate = edgeReactionRates[index]
-                for spcIndex in self.reactantIndices[index+numCoreReactions,:]:
-                    if spcIndex != -1 and spcIndex<numCoreSpecies:
-                        consumption = coreSpeciesConsumptionRates[spcIndex]
-                        if consumption != 0:
-                            totalDivAccumNums[index] *= (reactionRate+consumption)/consumption
-                        elif self.coreSpeciesConcentrations[spcIndex] == 0: 
-                            totalDivAccumNums[index] *= 1.0 #if the species concentration is zero ignore
-                        else:
-                            zeroConsumption = True #otherwise include edge reaction with most flux
-                            infAccumNumIndex = spcIndex
-                            break
-                if zeroConsumption:
-                    break
-                for spcIndex in self.productIndices[index+numCoreReactions,:]:
-                    if spcIndex != -1 and spcIndex<numCoreSpecies:
-                        production = coreSpeciesProductionRates[spcIndex]
-                        if production != 0:
-                            totalDivAccumNums[index] *= (reactionRate+production)/production
-                        elif self.coreSpeciesConcentrations[spcIndex] == 0: 
-                            totalDivAccumNums[index] *= 1.0 #if the species concentration is zero ignore
-                        else:
-                            zeroProduction = True #otherwise include edge reaction with most flux
-                            infAccumNumIndex = spcIndex
-                            break
-                if zeroProduction:
-                    break
-            #Get edge reaction with greatest total difference in Ln(accumulation number)
-            if len(totalDivAccumNums) > 0:
-                maxDifLnAccumNum = numpy.inf
-                if zeroConsumption:
-                    for index in xrange(numEdgeReactions):
-                        maxEdgeReactionAccum = 0.0
-                        maxAccumReactionIndex = -1
-                        if infAccumNumIndex in self.reactantIndices[index+numCoreReactions]:
-                            reactionRate = edgeReactionRates[index]
-                            if reactionRate > maxEdgeReactionAccum:
-                                maxEdgeReactionAccum = reactionRate
-                                maxAccumReactionIndex = index
-                    maxAccumReaction = edgeReactions[maxAccumReactionIndex]
-                elif zeroProduction:
-                    for index in xrange(numEdgeReactions):
-                        maxEdgeReactionAccum = 0.0
-                        maxAccumReactionIndex = -1
-                        if infAccumNumIndex in self.productIndices[index+numCoreReactions]:
-                            reactionRate = edgeReactionRates[index]
-                            if reactionRate > maxEdgeReactionAccum:
-                                maxEdgeReactionAccum = reactionRate
-                                maxAccumReactionIndex = index
-                    maxAccumReaction = edgeReactions[maxAccumReactionIndex]
-                elif len(totalDivAccumNums)>0:
-                    maxAccumReactionIndex = numpy.argmax(totalDivAccumNums)
-                    maxAccumReaction = edgeReactions[maxAccumReactionIndex]
-                    maxDifLnAccumNum = numpy.log(totalDivAccumNums[maxAccumReactionIndex])
-            else:
-                maxAccumReactionIndex = -1
-                maxAccumReaction = None
-                maxDifLnAccumNum = 0.0
-                
-            # Get the edge species with the highest flux
+#            totalDivAccumNums = numpy.ones(numEdgeReactions)
+#            for index in xrange(numEdgeReactions):
+#                reactionRate = edgeReactionRates[index]
+#                for spcIndex in self.reactantIndices[index+numCoreReactions,:]:
+#                    if spcIndex != -1 and spcIndex<numCoreSpecies:
+#                        consumption = coreSpeciesConsumptionRates[spcIndex]
+#                        if consumption != 0:
+#                            totalDivAccumNums[index] *= (reactionRate+consumption)/consumption
+#                        elif self.coreSpeciesConcentrations[spcIndex] == 0: 
+#                            totalDivAccumNums[index] *= 1.0 #if the species concentration is zero ignore
+#                        else:
+#                            zeroConsumption = True #otherwise include edge reaction with most flux
+#                            infAccumNumIndex = spcIndex
+#                            break
+#                if zeroConsumption:
+#                    break
+#                for spcIndex in self.productIndices[index+numCoreReactions,:]:
+#                    if spcIndex != -1 and spcIndex<numCoreSpecies:
+#                        production = coreSpeciesProductionRates[spcIndex]
+#                        if production != 0:
+#                            totalDivAccumNums[index] *= (reactionRate+production)/production
+#                        elif self.coreSpeciesConcentrations[spcIndex] == 0: 
+#                            totalDivAccumNums[index] *= 1.0 #if the species concentration is zero ignore
+#                        else:
+#                            zeroProduction = True #otherwise include edge reaction with most flux
+#                            infAccumNumIndex = spcIndex
+#                            break
+#                if zeroProduction:
+#                    break
+#            #Get edge reaction with greatest total difference in Ln(accumulation number)
+#            if len(totalDivAccumNums) > 0:
+#                maxDifLnAccumNum = numpy.inf
+#                if zeroConsumption:
+#                    for index in xrange(numEdgeReactions):
+#                        maxEdgeReactionAccum = 0.0
+#                        maxAccumReactionIndex = -1
+#                        if infAccumNumIndex in self.reactantIndices[index+numCoreReactions]:
+#                            reactionRate = edgeReactionRates[index]
+#                            if reactionRate > maxEdgeReactionAccum:
+#                                maxEdgeReactionAccum = reactionRate
+#                                maxAccumReactionIndex = index
+#                    maxAccumReaction = edgeReactions[maxAccumReactionIndex]
+#                elif zeroProduction:
+#                    for index in xrange(numEdgeReactions):
+#                        maxEdgeReactionAccum = 0.0
+#                        maxAccumReactionIndex = -1
+#                        if infAccumNumIndex in self.productIndices[index+numCoreReactions]:
+#                            reactionRate = edgeReactionRates[index]
+#                            if reactionRate > maxEdgeReactionAccum:
+#                                maxEdgeReactionAccum = reactionRate
+#                                maxAccumReactionIndex = index
+#                    maxAccumReaction = edgeReactions[maxAccumReactionIndex]
+#                elif len(totalDivAccumNums)>0:
+#                    maxAccumReactionIndex = numpy.argmax(totalDivAccumNums)
+#                    maxAccumReaction = edgeReactions[maxAccumReactionIndex]
+#                    maxDifLnAccumNum = numpy.log(totalDivAccumNums[maxAccumReactionIndex])
+#            else:
+#                maxAccumReactionIndex = -1
+#                maxAccumReaction = None
+#                maxDifLnAccumNum = 0.0
+
+            #get edge species with greatest metric
             if numEdgeSpecies > 0:
-                maxSpeciesIndex = numpy.argmax(edgeSpeciesRates)
-                maxSpecies = edgeSpecies[maxSpeciesIndex]
-                maxSpeciesRate = edgeSpeciesRates[maxSpeciesIndex]
+                maxSpeciesMetricIndex = numpy.argmax(edgeSpeciesMetrics)
+                maxMetricSpecies = edgeSpecies[maxSpeciesMetricIndex]
+                maxSpeciesMetric = edgeSpeciesMetrics[maxSpeciesMetricIndex]
             else:
-                maxSpeciesIndex = -1
-                maxSpecies = None
-                maxSpeciesRate = 0.0
-            if pdepNetworks:
-                maxNetworkIndex = numpy.argmax(networkLeakRates)
-                maxNetwork = pdepNetworks[maxNetworkIndex]
-                maxNetworkRate = networkLeakRates[maxNetworkIndex]
+                maxSpeciesMetricIndex = -1
+                maxMetricSpecies = None
+                maxSpeciesMetric = 0.0
+            # Get the edge species with the highest flux
+#            if numEdgeSpecies > 0:
+#                maxSpeciesIndex = numpy.argmax(edgeSpeciesRates)
+#                maxSpecies = edgeSpecies[maxSpeciesIndex]
+#                maxSpeciesRate = edgeSpeciesRates[maxSpeciesIndex]
+#            else:
+#                maxSpeciesIndex = -1
+#                maxSpecies = None
+#                maxSpeciesRate = 0.0
+                
+#            if pdepNetworks:
+#                maxNetworkIndex = numpy.argmax(networkLeakRates)
+#                maxNetwork = pdepNetworks[maxNetworkIndex]
+#                maxNetworkRate = networkLeakRates[maxNetworkIndex]
                 
             
             if filterReactions:
@@ -588,43 +654,53 @@ cdef class ReactionSystem(DASx):
                         if not bimolecularThreshold[i,j]:
                             if coreSpeciesConcentrations[i]*coreSpeciesConcentrations[j] > bimolecularThresholdVal:
                                 bimolecularThreshold[i,j] = True
-                                                    
+            
+            if maxSpeciesMetric > toleranceMoveToCore and not invalidObject:
+                logging.info('At time {0:10.4e} s, species {1} exceeded the normalized minimum species metric for moving to model core'.format(self.t, maxSpecies))
+                self.logRates(charRate, maxMetricSpecies, maxSpeciesRate, 0.0, maxSpeciesMetric/totalCoreSpeciesMetric, maxNetwork, maxNetworkRate)
+                self.logConversions(speciesIndex, y0)
+                invalidObject = maxMetricSpecies
+            if maxSpeciesMetric > toleranceInterruptSimulation and not invalidObject:
+                logging.info('At time {0:10.4e} s, species {1} exceeded the normalized minimum species metric for moving to model core'.format(self.t, maxSpecies))
+                self.logRates(charRate, maxMetricSpecies, maxSpeciesRate, 0.0, maxSpeciesMetric/totalCoreSpeciesMetric, maxNetwork, maxNetworkRate)
+                self.logConversions(speciesIndex, y0)
+                invalidObject = maxMetricSpecies
             # Interrupt simulation if that flux exceeds the characteristic rate times a tolerance
-            if (not ignoreOverallFluxCriterion) and (maxSpeciesRate > toleranceMoveToCore * charRate and not invalidObject):
-                logging.info('At time {0:10.4e} s, species {1} exceeded the minimum rate for moving to model core'.format(self.t, maxSpecies))
-                self.logRates(charRate, maxSpecies, maxSpeciesRate, maxDifLnAccumNum, maxNetwork, maxNetworkRate)
-                self.logConversions(speciesIndex, y0)
-                invalidObject = maxSpecies
-            if (not ignoreOverallFluxCriterion) and (maxSpeciesRate > toleranceInterruptSimulation * charRate):
-                logging.info('At time {0:10.4e} s, species {1} exceeded the minimum rate for simulation interruption'.format(self.t, maxSpecies))
-                self.logRates(charRate, maxSpecies, maxSpeciesRate, maxDifLnAccumNum, maxNetwork, maxNetworkRate)
-                self.logConversions(speciesIndex, y0)
-                break
+#            if (not ignoreOverallFluxCriterion) and (maxSpeciesRate > toleranceMoveToCore * charRate and not invalidObject):
+#                logging.info('At time {0:10.4e} s, species {1} exceeded the minimum rate for moving to model core'.format(self.t, maxSpecies))
+#                self.logRates(charRate, maxSpecies, maxSpeciesRate, maxDifLnAccumNum, maxNetwork, maxNetworkRate)
+#                self.logConversions(speciesIndex, y0)
+#                invalidObject = maxSpecies
+#            if (not ignoreOverallFluxCriterion) and (maxSpeciesRate > toleranceInterruptSimulation * charRate):
+#                logging.info('At time {0:10.4e} s, species {1} exceeded the minimum rate for simulation interruption'.format(self.t, maxSpecies))
+#                self.logRates(charRate, maxSpecies, maxSpeciesRate, maxDifLnAccumNum, maxNetwork, maxNetworkRate)
+#                self.logConversions(speciesIndex, y0)
+#                break
             
             #Interrupt simulation if the difference in natural log of total accumulation number exceeds tolerance
-            if maxDifLnAccumNum > toleranceReactionMoveToCore and not invalidObject:
-                logging.info('At time {0:10.4e} s, Reaction {1} exceeded the minimum difference in total log(accumulation number) for moving to model core'.format(self.t, maxAccumReaction))
-                self.logRates(charRate, maxSpecies, maxSpeciesRate, maxDifLnAccumNum, maxNetwork, maxNetworkRate)
-                self.logConversions(speciesIndex, y0)
-                invalidObject = maxAccumReaction
-            if maxDifLnAccumNum > toleranceReactionInterruptSimulation:
-                logging.info('At time {0:10.4e} s, Reaction {1} exceeded the minimum difference in total log(accumulation number) for simulation interruption'.format(self.t, maxAccumReaction))
-                self.logRates(charRate, maxSpecies, maxSpeciesRate, maxDifLnAccumNum, maxNetwork, maxNetworkRate)
-                self.logConversions(speciesIndex, y0)
-                break
+#            if maxDifLnAccumNum > toleranceReactionMoveToCore and not invalidObject:
+#                logging.info('At time {0:10.4e} s, Reaction {1} exceeded the minimum difference in total log(accumulation number) for moving to model core'.format(self.t, maxAccumReaction))
+#                self.logRates(charRate, maxSpecies, maxSpeciesRate, maxDifLnAccumNum, maxNetwork, maxNetworkRate)
+#                self.logConversions(speciesIndex, y0)
+#                invalidObject = maxAccumReaction
+#            if maxDifLnAccumNum > toleranceReactionInterruptSimulation:
+#                logging.info('At time {0:10.4e} s, Reaction {1} exceeded the minimum difference in total log(accumulation number) for simulation interruption'.format(self.t, maxAccumReaction))
+#                self.logRates(charRate, maxSpecies, maxSpeciesRate, maxDifLnAccumNum, maxNetwork, maxNetworkRate)
+#                self.logConversions(speciesIndex, y0)
+#                break
             
             # If pressure dependence, also check the network leak fluxes
-            if pdepNetworks:
-                if maxNetworkRate > toleranceMoveToCore * charRate and not invalidObject:
-                    logging.info('At time {0:10.4e} s, PDepNetwork #{1:d} exceeded the minimum rate for exploring'.format(self.t, maxNetwork.index))
-                    self.logRates(charRate, maxSpecies, maxSpeciesRate, maxDifLnAccumNum, maxNetwork, maxNetworkRate)
-                    self.logConversions(speciesIndex, y0)
-                    invalidObject = maxNetwork
-                if maxNetworkRate > toleranceInterruptSimulation * charRate:
-                    logging.info('At time {0:10.4e} s, PDepNetwork #{1:d} exceeded the minimum rate for simulation interruption'.format(self.t, maxNetwork.index))
-                    self.logRates(charRate, maxSpecies, maxSpeciesRate, maxDifLnAccumNum, maxNetwork, maxNetworkRate)
-                    self.logConversions(speciesIndex, y0)
-                    break
+#            if pdepNetworks:
+#                if maxNetworkRate > toleranceMoveToCore * charRate and not invalidObject:
+#                    logging.info('At time {0:10.4e} s, PDepNetwork #{1:d} exceeded the minimum rate for exploring'.format(self.t, maxNetwork.index))
+#                    self.logRates(charRate, maxSpecies, maxSpeciesRate, maxDifLnAccumNum, maxNetwork, maxNetworkRate)
+#                    self.logConversions(speciesIndex, y0)
+#                    invalidObject = maxNetwork
+#                if maxNetworkRate > toleranceInterruptSimulation * charRate:
+#                    logging.info('At time {0:10.4e} s, PDepNetwork #{1:d} exceeded the minimum rate for simulation interruption'.format(self.t, maxNetwork.index))
+#                    self.logRates(charRate, maxSpecies, maxSpeciesRate, maxDifLnAccumNum, maxNetwork, maxNetworkRate)
+#                    self.logConversions(speciesIndex, y0)
+#                    break
 
             # Finish simulation if any of the termination criteria are satisfied
             for term in self.termination:
@@ -684,12 +760,13 @@ cdef class ReactionSystem(DASx):
         # (if the simulation was valid)
         return terminated, invalidObject
 
-    cpdef logRates(self, double charRate, object species, double speciesRate, double maxDifLnAccumNum, object network, double networkRate):
+    cpdef logRates(self, double charRate, object species, double speciesRate, double maxDifLnAccumNum, double maxSpeciesMetric, object network, double networkRate):
         """
         Log information about the current maximum species and network rates.
         """
         logging.info('    Characteristic rate: {0:10.4e} mol/m^3*s'.format(charRate))
         logging.info('    Max(Dif(Ln(accumulation number))):  {0:10.4e}'.format(maxDifLnAccumNum))
+        logging.info('    Max Species Metric  {0:10.4e}'.format(maxSpeciesMetric))
         if charRate == 0.0:
             logging.info('    {0} rate: {1:10.4e} mol/m^3*s'.format(species, speciesRate))
             if network is not None:
