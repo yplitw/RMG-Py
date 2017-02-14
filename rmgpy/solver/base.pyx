@@ -377,12 +377,12 @@ cdef class ReactionSystem(DASx):
         cdef numpy.ndarray[numpy.float64_t, ndim=1] y0 #: Vector containing the number of moles of each species
         cdef numpy.ndarray[numpy.float64_t, ndim=1] coreSpeciesRates, edgeSpeciesRates, networkLeakRates, coreSpeciesProductionRates, coreSpeciesConsumptionRates#, totalDivAccumNums
         cdef numpy.ndarray[numpy.float64_t, ndim=1] maxCoreSpeciesRates, maxEdgeSpeciesRates, maxNetworkLeakRates,maxEdgeSpeciesRateRatios, maxNetworkLeakRateRatios, edgeSpeciesMetrics, aVec
-        cdef numpy.ndarray[numpy.float64_t, ndim=2] coreSpeciesMetricMatrix, A
+        cdef numpy.ndarray[numpy.float64_t, ndim=2] coreSpeciesMetricMatrix
         cdef bint terminated
         cdef object maxSpecies, maxNetwork, 
         cdef int i, j, k, index1, index2
         cdef numpy.ndarray[numpy.float64_t, ndim=1] forwardRateCoefficients, coreSpeciesConcentrations
-        cdef double  prevTime, totalMoles, c, volume, RTP, unimolecularThresholdVal, bimolecularThresholdVal, temp
+        cdef double  prodfactor, consfactor, prevTime, totalMoles, c, volume, RTP, unimolecularThresholdVal, bimolecularThresholdVal, temp
         cdef bool zeroProduction, zeroConsumption
         cdef numpy.ndarray[numpy.float64_t, ndim=1] edgeReactionRates
         cdef double reactionRate, production, consumption
@@ -520,34 +520,42 @@ cdef class ReactionSystem(DASx):
             for index1 in xrange(numCoreSpecies):
                 for index2 in xrange(numCoreSpecies):
                     if index1 == index2:
-                        coreSpeciesMetricMatrix[index1,index2] = 0.0
+                        coreSpeciesMetricMatrix[index1,index2] = -1.0
                         continue
-                    production = 0
-                    consumption = 0
+                    production = 0.0
+                    consumption = 0.0
                     for index in xrange(numCoreReactions):
                         if index1 in self.reactantIndices[index,:] or index1 in self.productIndices[index,:]:
                             if index2 in self.reactantIndices[index,:]:
-                                consumption += coreReactionRates[index]* sum(self.reactantIndices[index,:]==index1)
+                                consumption += coreReactionRates[index]* sum(self.reactantIndices[index,:]==index2)
                             if index2 in self.productIndices[index,:]:
-                                production += coreReactionRates[index]* sum(self.productIndices[index,:]==index1)
-                    if coreSpeciesProductionRates[index1] == production or coreSpeciesConsumptionRates[index1] == consumption:
-                        coreSpeciesMetricMatrix[index1,index2] = 1.0
+                                production += coreReactionRates[index]* sum(self.productIndices[index,:]==index2)
+                    if coreSpeciesProductionRates[index2] == 0.0: 
+                        prodfactor = 0.0
                     else:
-                        if numpy.isnan(coreSpeciesMetricMatrix).any():
-                            logging.info('NaN in coreSpeciesMetricMatrix')
-                            logging.info('coreSpeciesProductionRate: {0:10.4e}'.format(coreSpeciesProductionRates[index1]))
-                            logging.info('coreSpeciesProductionRate: {0:10.4e}'.format(coreSpeciesProductionRates[index1]))
-                            logging.info('production: {0:10.4e}'.format(production))
-                            logging.info('consumption: {0:10.4e}'.format(consumption))
-                        coreSpeciesMetricMatrix[index1,index2] = 2.0/numpy.pi*numpy.arctan(abs(numpy.log(1.0-production/coreSpeciesProductionRates[index1]))+abs(numpy.log(1.0-consumption/coreSpeciesConsumptionRates[index1])))
-            
+                        prodfactor = production/coreSpeciesProductionRates[index2] #use charRate instead?
+                    if coreSpeciesConsumptionRates[index2] == 0.0:
+                        consfactor = 0.0
+                    else:
+                        consfactor = consumption/coreSpeciesConsumptionRates[index2]
+                    if numpy.isnan(coreSpeciesMetricMatrix).any():
+                        logging.info('NaN in coreSpeciesMetricMatrix')
+                        logging.info('coreSpeciesProductionRate: {0:10.4e}'.format(coreSpeciesProductionRates[index1]))
+                        logging.info('coreSpeciesProductionRate: {0:10.4e}'.format(coreSpeciesProductionRates[index1]))
+                        logging.info('production: {0:10.4e}'.format(production))
+                        logging.info('consumption: {0:10.4e}'.format(consumption))
+                    coreSpeciesMetricMatrix[index1,index2] = 0.5*(prodfactor+consfactor)
+                        
             logging.info('coreSpeciesRateRatios: '+str(coreSpeciesRateRatios))
-            aVec = -toleranceReactionMoveToCore*2.0/numpy.pi*numpy.arctan(coreSpeciesRateRatios)
-            A = coreSpeciesMetricMatrix-numpy.eye(numCoreSpecies)
-            coreSpeciesMetrics = numpy.linalg.solve(A,aVec)
-            logging.info('NaNs in coreSpeciesMetrics: {0:10.4e}'.format(numpy.isnan(coreSpeciesMetrics).sum()))
-            logging.info('A: '+str(A))
+            
+            logging.info('coreSpeciesMetricMatrix: '+str(coreSpeciesMetricMatrix))
+            aVec = numpy.zeros(numCoreSpecies)
+            for i in xrange(numCoreSpecies):
+                aVec[i] = -max(coreSpeciesProductionRates[i],coreSpeciesConsumptionRates[i])
             logging.info('aVec: '+str(aVec))
+            coreSpeciesMetrics = numpy.linalg.solve(coreSpeciesMetricMatrix,aVec)
+            logging.info('NaNs in coreSpeciesMetrics: {0:10.4e}'.format(numpy.isnan(coreSpeciesMetrics).sum()))
+            logging.info('coreSpeciesMetrics: '+str(coreSpeciesMetrics))
             totalCoreSpeciesMetric = coreSpeciesMetrics.sum()
             coreSpeciesMetrics = coreSpeciesMetrics/totalCoreSpeciesMetric #normalization
             if numpy.isnan(coreSpeciesMetrics).any():
@@ -569,7 +577,7 @@ cdef class ReactionSystem(DASx):
                                 production += edgeReactionRates[index-numCoreReactions]* sum(self.productIndices[index,:]==index1)
                     if coreSpeciesProductionRates[index1] == production or coreSpeciesConsumptionRates[index1] == consumption:
                         edgeSpeciesMetrics[index1] += coreSpeciesMetrics[index1]
-                    elif coreSpeciesProductionRates[index1] == 0.0 or coreSpeciesConsumptionRates == 0.0:
+                    elif coreSpeciesProductionRates[index1] == 0.0 or coreSpeciesConsumptionRates[index1] == 0.0:
                         pass
                     else:
                         if numpy.isnan(edgeSpeciesMetrics).any():
