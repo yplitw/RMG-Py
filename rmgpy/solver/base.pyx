@@ -482,8 +482,11 @@ cdef class ReactionSystem(DASx):
             networkLeakRates = numpy.abs(self.networkLeakRates)
             edgeSpeciesRateRatios = numpy.abs(self.edgeSpeciesRates/charRate)
             coreSpeciesRateRatios = numpy.abs(self.coreSpeciesProductionRates/charRate)
-            logging.info('coreSpeciesProductionRates: '+str(coreSpeciesProductionRates))
-            logging.info('charRate: '+str(charRate))
+            #logging.info('coreSpeciesProductionRates: '+str(coreSpeciesProductionRates))
+            #logging.info('coreSpeciesConsumptionRates: '+str(coreSpeciesConsumptionRates))
+            #logging.info('charRate: '+str(charRate))
+            #logging.info('coreReactionRates: '+str(coreReactionRates))
+            #logging.info('edgeReactionRates: '+str(edgeReactionRates))
             networkLeakRateRatios = numpy.abs(self.networkLeakRates/charRate)
             numEdgeReactions = self.numEdgeReactions
             coreSpeciesMetricMatrix = self.coreSpeciesMetricMatrix
@@ -507,7 +510,6 @@ cdef class ReactionSystem(DASx):
                     maxNetworkLeakRateRatios[index] = networkLeakRateRatios[index]
             
             if charRate == 0:
-                logging.info('got here')
                 maxSpeciesIndex = numpy.argmax(edgeSpeciesRates)
                 maxSpecies = edgeSpecies[maxSpeciesIndex]
                 maxSpeciesRate = edgeSpeciesRates[maxSpeciesIndex]
@@ -538,57 +540,40 @@ cdef class ReactionSystem(DASx):
                         consfactor = 0.0
                     else:
                         consfactor = consumption/coreSpeciesConsumptionRates[index2]
-                    if numpy.isnan(coreSpeciesMetricMatrix).any():
-                        logging.info('NaN in coreSpeciesMetricMatrix')
-                        logging.info('coreSpeciesProductionRate: {0:10.4e}'.format(coreSpeciesProductionRates[index1]))
-                        logging.info('coreSpeciesProductionRate: {0:10.4e}'.format(coreSpeciesProductionRates[index1]))
-                        logging.info('production: {0:10.4e}'.format(production))
-                        logging.info('consumption: {0:10.4e}'.format(consumption))
+
                     coreSpeciesMetricMatrix[index1,index2] = 0.5*(prodfactor+consfactor)
                         
-            logging.info('coreSpeciesRateRatios: '+str(coreSpeciesRateRatios))
+            logging.info('coreSpeciesRateRatios: \n'+str(coreSpeciesRateRatios))
             
-            logging.info('coreSpeciesMetricMatrix: '+str(coreSpeciesMetricMatrix))
+            #logging.info('coreSpeciesMetricMatrix \n: '+str(coreSpeciesMetricMatrix))
             aVec = numpy.zeros(numCoreSpecies)
             for i in xrange(numCoreSpecies):
-                aVec[i] = -max(coreSpeciesProductionRates[i],coreSpeciesConsumptionRates[i])
-            logging.info('aVec: '+str(aVec))
+                aVec[i] = -max(coreSpeciesProductionRates[i],coreSpeciesConsumptionRates[i])/charRate
+            logging.info('aVec: \n'+str(aVec))
             coreSpeciesMetrics = numpy.linalg.solve(coreSpeciesMetricMatrix,aVec)
-            logging.info('NaNs in coreSpeciesMetrics: {0:10.4e}'.format(numpy.isnan(coreSpeciesMetrics).sum()))
-            logging.info('coreSpeciesMetrics: '+str(coreSpeciesMetrics))
-            totalCoreSpeciesMetric = coreSpeciesMetrics.sum()
-            coreSpeciesMetrics = coreSpeciesMetrics/totalCoreSpeciesMetric #normalization
-            if numpy.isnan(coreSpeciesMetrics).any():
-                logging.info('NaNs in coreSpecies Metrics')
-#            for index in xrange(numCoreSpecies):
-#                if self.maxCoreSpeciesMetrics[index] > coreSpeciesMetrics[index]:
-#                    self.maxCoreSpeciesMetrics[index] = coreSpeciesMetrics[index]
+            logging.info('coreSpeciesMetrics: \n'+str(coreSpeciesMetrics))
+
             edgeSpeciesMetrics = numpy.zeros((numEdgeSpecies),numpy.float64)
             
             for index1 in xrange(numEdgeSpecies):
+                edgeSpeciesMetrics[index1] += edgeSpeciesRateRatios[index1]
                 for index2 in xrange(numCoreSpecies):
                     production = 0
                     consumption = 0
                     for index in xrange(numCoreReactions,numCoreReactions+numEdgeReactions):
                         if index1 in self.reactantIndices[index,:] or index1 in self.productIndices[index,:]:
                             if index2 in self.reactantIndices[index,:]:
-                                consumption += edgeReactionRates[index-numCoreReactions]* sum(self.reactantIndices[index,:]==index1)
+                                consumption += abs(edgeReactionRates[index-numCoreReactions])* abs(sum(self.reactantIndices[index,:]==index1))
                             if index2 in self.productIndices[index,:]:
-                                production += edgeReactionRates[index-numCoreReactions]* sum(self.productIndices[index,:]==index1)
-                    if coreSpeciesProductionRates[index1] == production or coreSpeciesConsumptionRates[index1] == consumption:
-                        edgeSpeciesMetrics[index1] += coreSpeciesMetrics[index1]
-                    elif coreSpeciesProductionRates[index1] == 0.0 or coreSpeciesConsumptionRates[index1] == 0.0:
-                        pass
-                    else:
-                        if numpy.isnan(edgeSpeciesMetrics).any():
-                            logging.info('NaN in edgeSpeciesMetrics')
-                            logging.info('coreSpeciesProductionRate: {0:10.4e}'.format(coreSpeciesProductionRates[index1]))
-                            logging.info('coreSpeciesProductionRate: {0:10.4e}'.format(coreSpeciesProductionRates[index1]))
-                            logging.info('production: {0:10.4e}'.format(production))
-                            logging.info('consumption: {0:10.4e}'.format(consumption))
-                        edgeSpeciesMetrics[index1] += coreSpeciesMetrics[index1]*2.0/numpy.pi*numpy.arctan(abs(numpy.log(1.0-production/coreSpeciesProductionRates[index1]))+abs(numpy.log(1.0-consumption/coreSpeciesConsumptionRates[index1])))
+                                production += abs(edgeReactionRates[index-numCoreReactions])* abs(sum(self.productIndices[index,:]==index1))
+                    if coreSpeciesProductionRates[index2] != 0:
+                        edgeSpeciesMetrics[index1] += abs(.5*production/coreSpeciesProductionRates[index2]*coreSpeciesMetrics[index2])
+                    if coreSpeciesConsumptionRates[index2] != 0:
+                        edgeSpeciesMetrics[index1] += abs(.5*consumption/coreSpeciesConsumptionRates[index2]*coreSpeciesMetrics[index2])
+                    
             
-            
+            logging.info('EdgeSpeciesRateRatios: \n'+str(edgeSpeciesRateRatios)+'\n')
+            logging.info('EdgeSpeciesMetrics: \n'+str(edgeSpeciesMetrics)+'\n')
             #logging.info('At time {0:10.4e} s, max normalized species metric was {0:10.4e}'.format(self.t, numpy.nanmedian(edgeSpeciesMetrics)))
              
             #get abs(delta(Ln(total accumulation numbers))) (accumulation number=Production/Consumption)
@@ -699,13 +684,13 @@ cdef class ReactionSystem(DASx):
             
             if maxSpeciesMetric > toleranceMoveToCore and not invalidObject:
                 logging.info('At time {0:10.4e} s, species {1} exceeded the normalized minimum species metric for moving to model core'.format(self.t, maxMetricSpecies))
-                self.logRates(charRate, maxMetricSpecies, maxSpeciesRate, 0.0, maxSpeciesMetric/totalCoreSpeciesMetric, maxNetwork, maxNetworkRate)
+                self.logRates(charRate, maxMetricSpecies, maxSpeciesRate, 0.0, maxSpeciesMetric, maxNetwork, maxNetworkRate)
                 self.logConversions(speciesIndex, y0)
                 invalidObject = maxMetricSpecies
                 break
             if maxSpeciesMetric > toleranceInterruptSimulation and not invalidObject:
                 logging.info('At time {0:10.4e} s, species {1} exceeded the normalized minimum species metric for moving to model core'.format(self.t, maxMetricSpecies))
-                self.logRates(charRate, maxMetricSpecies, maxSpeciesRate, 0.0, maxSpeciesMetric/totalCoreSpeciesMetric, maxNetwork, maxNetworkRate)
+                self.logRates(charRate, maxMetricSpecies, maxSpeciesRate, 0.0, maxSpeciesMetric, maxNetwork, maxNetworkRate)
                 self.logConversions(speciesIndex, y0)
                 invalidObject = maxMetricSpecies
                 break
