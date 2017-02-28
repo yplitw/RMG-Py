@@ -145,6 +145,10 @@ cdef class ReactionSystem(DASx):
 
         self.coreSpeciesMetricMatrix = None
         self.maxCoreSpeciesMetrics = None
+        self.coreSpeciesReactionReactantInds = None
+        self.coreSpeciesReactionProductInds = None
+        self.edgeSpeciesReactionReactantInds = None
+        self.edgeSpeciesReactionProductInds = None
         
         # sensitivity variables
         self.sensmethod = 2 # sensmethod = 1 for staggered corrector sensitivities, 0 (simultaneous corrector), 2 (staggered direct)
@@ -224,7 +228,45 @@ cdef class ReactionSystem(DASx):
         
         self.maxCoreSpeciesMetrics = numpy.zeros((self.numCoreSpecies),numpy.float64)
         self.coreSpeciesMetricMatrix = numpy.matrix(numpy.zeros((self.numCoreSpecies,self.numCoreSpecies), numpy.float64))
+        
+        self.generate_species_reaction_indices()
+        
+    def generate_species_reaction_indices(self):
+        """
+        generates arrays for core and edge such that arr[spcInd] = [rxnind1,rxnind2,...]
+        """
+        
+        self.coreSpeciesReactionProductInds = numpy.array([dict() for i in xrange(self.numCoreSpecies)])
+        self.edgeSpeciesReactionProductInds = numpy.array([dict() for i in xrange(self.numEdgeSpecies)])
+        self.coreSpeciesReactionReactantInds = numpy.array([dict() for i in xrange(self.numCoreSpecies)])
+        self.edgeSpeciesReactionReactantInds = numpy.array([dict() for i in xrange(self.numEdgeSpecies)])
+        coreSpeciesReactionProductInds = self.coreSpeciesReactionProductInds
+        edgeSpeciesReactionProductInds = self.edgeSpeciesReactionProductInds
+        coreSpeciesReactionReactantInds = self.coreSpeciesReactionReactantInds
+        edgeSpeciesReactionReactantInds = self.edgeSpeciesReactionReactantInds
+        numCoreReactions = self.numCoreReactions
+        reactantIndices = self.reactantIndices
+        productIndices = self.productIndices
+        numCoreSpecies = self.numCoreSpecies
+        numEdgeSpecies = self.numEdgeSpecies
+        
+        for i in xrange(len(reactantIndices)):
+            for k in reactantIndices[i]:
+                v = numpy.count_nonzero(reactantIndices==k)
+                if k < numCoreSpecies:
+                    coreSpeciesReactionReactantInds[k][i] = v
+                else:   
+                    edgeSpeciesReactionReactantInds[k-numCoreSpecies][i] = v
+                    
+        for i in xrange(len(productIndices)):
+            for k in productIndices[i]:
+                v = numpy.count_nonzero(productIndices==k)
+                if k < numCoreSpecies:
+                    coreSpeciesReactionProductInds[k][i] = v
+                else:
+                    edgeSpeciesReactionProductInds[k-numCoreSpecies][i] = v
 
+        
     def initialize_solver(self):
         DASx.initialize(self, self.t0, self.y0, self.dydt0, self.senpar, self.atol_array, self.rtol_array)
 
@@ -390,6 +432,9 @@ cdef class ReactionSystem(DASx):
         cdef numpy.ndarray[numpy.int_t, ndim=1] sensSpeciesIndices
         cdef numpy.ndarray[numpy.float64_t, ndim=1] moleSens, dVdk, normSens
         cdef list time_array, normSens_array 
+        cdef numpy.ndarray[dict,ndim=1] coreSpeciesReactionReactantInds,coreSpeciesReactionProductInds,edgeSpeciesReactionReactantInds,edgeSpeciesReactionProductInds
+        cdef set spcRxnInds,coreSpcReactantInds,coreSpcProductInds,reactantInds,productInds
+        cdef double rate
         
         zeroProduction = False
         zeroConsumption = False
@@ -415,7 +460,8 @@ cdef class ReactionSystem(DASx):
         maxNetwork = None
         maxNetworkRate = 0.0
         iteration = 0
-
+        edgeSpeciesMetrics = numpy.zeros((numEdgeSpecies),numpy.float64)
+        
         maxCoreSpeciesRates = self.maxCoreSpeciesRates
         maxEdgeSpeciesRates = self.maxEdgeSpeciesRates
         maxNetworkLeakRates = self.maxNetworkLeakRates
@@ -425,6 +471,13 @@ cdef class ReactionSystem(DASx):
         unimolecularThreshold = self.unimolecularThreshold
         bimolecularThreshold = self.bimolecularThreshold
         
+        coreSpeciesReactionReactantInds = self.coreSpeciesReactionReactantInds
+        coreSpeciesReactionProductInds = self.coreSpeciesReactionProductInds
+        edgeSpeciesReactionReactantInds = self.edgeSpeciesReactionReactantInds
+        edgeSpeciesReactionProductInds = self.edgeSpeciesReactionProductInds
+        
+        reactantIndices = self.reactantIndices
+        productIndices = self.productIndices
         # Copy the initial conditions to use in evaluating conversions
         y0 = self.y.copy()
         
@@ -515,34 +568,49 @@ cdef class ReactionSystem(DASx):
                 break
             
             for index1 in xrange(numCoreSpecies):
+                coreSpcReactantInds = set(coreSpeciesReactionReactantInds[index1].keys()) #this is a set
+                coreSpcProductInds = set(coreSpeciesReactionProductInds[index1].keys()) #this is a set
+                spcRxnInds = coreSpcReactantInds | coreSpcProductInds
                 for index2 in xrange(numCoreSpecies):
                     if index1 == index2:
                         coreSpeciesMetricMatrix[index1,index2] = -1.0
                         continue
-                    production = 0.0
-                    consumption = 0.0
-                    for index in xrange(numCoreReactions):
-                        if index1 in self.reactantIndices[index,:] or index1 in self.productIndices[index,:]:
-                            if index2 in self.reactantIndices[index,:]:  
-                                if coreReactionRates[index]>0:
-                                    consumption += abs(coreReactionRates[index]* sum(self.reactantIndices[index,:]==index2))
-                                else:
-                                    production += abs(coreReactionRates[index]* sum(self.reactantIndices[index,:]==index2))
-                            elif index2 in self.productIndices[index,:] and coreReactionRates[index]>0:
-                                if coreReactionRates[index]>0:
-                                    production += abs(coreReactionRates[index]* sum(self.productIndices[index,:]==index2))
-                                else:
-                                    consumption += abs(coreReactionRates[index]* sum(self.reactantIndices[index,:]==index2))
+                    coreSpc2ReactantInds = set(coreSpeciesReactionReactantInds[index2].keys()) #this is a set
+                    coreSpc2ProductInds = set(coreSpeciesReactionProductInds[index2].keys()) #this is a set
+                    
+                    reactantInds = coreSpc2ReactantInds & spcRxnInds 
+                    productInds = coreSpc2ProductInds & spcRxnInds
+                    
+                    consumption = 0
+                    production = 0 
+                    for index in reactantInds:
+                        if index < numCoreReactions:
+                            rate = coreReactionRates[index]
+                            if rate >0:
+                                consumption += abs(rate)* coreSpeciesReactionReactantInds[index2][index] 
+                            else:
+                                production += abs(rate)* coreSpeciesReactionReactantInds[index2][index] 
+                        
+                    for index in productInds:
+                        if index < numCoreReactions:
+                            rate = coreReactionRates[index]
+                            if rate > 0:
+                                production += abs(rate)* coreSpeciesReactionProductInds[index2][index] 
+                            else:
+                                consumption += abs(rate)* coreSpeciesReactionProductInds[index2][index] 
+                      
                     if coreSpeciesProductionRates[index2] == 0.0: 
                         prodfactor = 0.0
                     else:
-                        prodfactor = production/coreSpeciesProductionRates[index2] #use charRate instead?
+                        prodfactor = production/coreSpeciesProductionRates[index2] 
+                        
                     if coreSpeciesConsumptionRates[index2] == 0.0:
                         consfactor = 0.0
                     else:
                         consfactor = consumption/coreSpeciesConsumptionRates[index2]
-
-                    coreSpeciesMetricMatrix[index1,index2] = 0.5*(prodfactor+consfactor)
+                    
+                    coreSpeciesMetricMatrix[index1,index2] = toleranceReactionMoveToCore*(prodfactor+consfactor)
+                        
                         
             aVec = numpy.zeros(numCoreSpecies)
             for i in xrange(numCoreSpecies):
@@ -550,26 +618,40 @@ cdef class ReactionSystem(DASx):
 
             coreSpeciesMetrics = numpy.linalg.solve(coreSpeciesMetricMatrix,aVec)
             
-            if (coreSpeciesMetrics<0).any(): #not exactly sure why it does this sometimes, but taking the abs highest magnitude seems to make chemical sense
-                coreSpeciesMetrics = numpy.abs(coreSpeciesMetrics)
+#            if (coreSpeciesMetrics<0).any(): #not exactly sure why it does this sometimes, but taking the abs highest magnitude seems to make chemical sense
+#                coreSpeciesMetrics = numpy.abs(coreSpeciesMetrics)
                
-            edgeSpeciesMetrics = numpy.zeros((numEdgeSpecies),numpy.float64)
             
             for index1 in xrange(numEdgeSpecies):
-                edgeSpeciesMetrics[index1] += edgeSpeciesRateRatios[index1]
+                spcRxnInds = set(edgeSpeciesReactionReactantInds[index1].keys()) | set(edgeSpeciesReactionProductInds[index1]) #this is a set
+                edgeSpeciesMetrics[index1] = edgeSpeciesRateRatios[index1]
                 for index2 in xrange(numCoreSpecies):
-                    production = 0
+                    coreSpcReactantInds = set(coreSpeciesReactionReactantInds[index2].keys()) #this is a set
+                    coreSpcProductInds = set(coreSpeciesReactionProductInds[index2].keys()) #this is a set
+                    
+                    reactantInds = coreSpcReactantInds & spcRxnInds 
+                    productInds = coreSpcProductInds & spcRxnInds
+                    
                     consumption = 0
-                    for index in xrange(numCoreReactions,numCoreReactions+numEdgeReactions):
-                        if index1 in self.reactantIndices[index,:] or index1 in self.productIndices[index,:]:
-                            if (index2 in self.reactantIndices[index,:] and edgeReactionRates[index-numCoreReactions]>0) or (edgeReactionRates[index-numCoreReactions]<0 and  index2 in self.productIndices[index,:]): #we are including reactions that may not come with the species, but we kind of have to
-                                consumption += abs(edgeReactionRates[index-numCoreReactions])* abs(sum(self.reactantIndices[index,:]==index1+numCoreSpecies))
-                            if (index2 in self.productIndices[index,:] and edgeReactionRates[index-numCoreReactions]>0) or (edgeReactionRates[index-numCoreReactions]<0 and  index2 in self.reactantIndices[index,:]):
-                                production += abs(edgeReactionRates[index-numCoreReactions])* abs(sum(self.productIndices[index,:]==index1+numCoreSpecies))
+                    production = 0
+                    for index in reactantInds:
+                        rate = edgeReactionRates[index-numCoreReactions]
+                        if rate > 0:
+                            consumption += abs(edgeReactionRates[index-numCoreReactions])* coreSpeciesReactionReactantInds[index2][index] 
+                        else:
+                            production += abs(edgeReactionRates[index-numCoreReactions])* coreSpeciesReactionReactantInds[index2][index] 
+                    
+                    for index in productInds:
+                        rate = edgeReactionRates[index-numCoreReactions]
+                        if rate > 0:
+                            production += abs(rate)* coreSpeciesReactionProductInds[index2][index] 
+                        else:
+                            consumption += abs(rate)* coreSpeciesReactionProductInds[index2][index] 
+                    
                     if coreSpeciesProductionRates[index2] != 0:
-                        edgeSpeciesMetrics[index1] += abs(.5*production/coreSpeciesProductionRates[index2]*coreSpeciesMetrics[index2])
+                        edgeSpeciesMetrics[index1] += abs(toleranceReactionMoveToCore*production/coreSpeciesProductionRates[index2]*coreSpeciesMetrics[index2])
                     if coreSpeciesConsumptionRates[index2] != 0:
-                        edgeSpeciesMetrics[index1] += abs(.5*consumption/coreSpeciesConsumptionRates[index2]*coreSpeciesMetrics[index2])
+                        edgeSpeciesMetrics[index1] += abs(toleranceReactionMoveToCore*consumption/coreSpeciesConsumptionRates[index2]*coreSpeciesMetrics[index2])
                     
             
             #logging.info('EdgeSpeciesRateRatios: \n'+str(edgeSpeciesRateRatios)+'\n')
@@ -686,12 +768,13 @@ cdef class ReactionSystem(DASx):
                 logging.info('At time {0:10.4e} s, species {1} exceeded the normalized minimum species metric for moving to model core'.format(self.t, maxMetricSpecies))
                 self.logRates(charRate, maxMetricSpecies, maxSpeciesRate, 0.0, maxSpeciesMetric, maxNetwork, maxNetworkRate)
                 self.logConversions(speciesIndex, y0)
-                logging.info('coreSpeciesRateRatios: \n'+str(coreSpeciesRateRatios))
+                #logging.info('coreSpeciesMetricMatrix: \n'+str(coreSpeciesMetricMatrix))
+                #logging.info('coreSpeciesRateRatios: \n'+str(coreSpeciesRateRatios))
                 logging.info('coreSpeciesMetrics: \n'+str(coreSpeciesMetrics))
-                logging.info('edgeSpecies: \n')
-                for i in range(len(edgeSpecies)):
-                    logging.info(edgeSpecies[i].label+' ')
-                logging.info('EdgeSpeciesRateRatios: \n'+str(edgeSpeciesRateRatios)+'\n')
+                #logging.info('edgeSpecies: \n')
+                #for i in range(len(edgeSpecies)):
+                #    logging.info(edgeSpecies[i].label+' '+str(edgeSpeciesMetrics[i]))
+                #logging.info('EdgeSpeciesRateRatios: \n'+str(edgeSpeciesRateRatios)+'\n')
                 logging.info('EdgeSpeciesMetrics: \n'+str(edgeSpeciesMetrics)+'\n')
                 invalidObject = maxMetricSpecies
                 break
@@ -699,10 +782,10 @@ cdef class ReactionSystem(DASx):
                 logging.info('At time {0:10.4e} s, species {1} exceeded the normalized minimum species metric for moving to model core'.format(self.t, maxMetricSpecies))
                 self.logRates(charRate, maxMetricSpecies, maxSpeciesRate, 0.0, maxSpeciesMetric, maxNetwork, maxNetworkRate)
                 self.logConversions(speciesIndex, y0)
-                logging.info('coreSpeciesRateRatios: \n'+str(coreSpeciesRateRatios))
+                #logging.info('coreSpeciesRateRatios: \n'+str(coreSpeciesRateRatios))
                 logging.info('coreSpeciesMetrics: \n'+str(coreSpeciesMetrics))
-                logging.info('edgeSpecies: \n'+str([str(i) for i in edgeSpecies]))
-                logging.info('EdgeSpeciesRateRatios: \n'+str(edgeSpeciesRateRatios)+'\n')
+                #logging.info('edgeSpecies: \n'+str([str(i) for i in edgeSpecies]))
+                #logging.info('EdgeSpeciesRateRatios: \n'+str(edgeSpeciesRateRatios)+'\n')
                 logging.info('EdgeSpeciesMetrics: \n'+str(edgeSpeciesMetrics)+'\n')
                 invalidObject = maxMetricSpecies
                 break

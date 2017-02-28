@@ -84,6 +84,10 @@ cdef class ReactionSystem(DASx):
     cdef public numpy.ndarray maxEdgeSpeciesRateRatios
     cdef public numpy.ndarray maxNetworkLeakRateRatios
     cdef public numpy.ndarray maxCoreSpeciesMetrics
+    cdef public numpy.ndarray coreSpeciesReactionReactantInds 
+    cdef public numpy.ndarray coreSpeciesReactionProductInds 
+    cdef public numpy.ndarray edgeSpeciesReactionReactantInds 
+    cdef public numpy.ndarray edgeSpeciesReactionProductInds 
     # sensitivity variables
     # cdef public int sensmethod
     cdef public numpy.ndarray sensitivityCoefficients
