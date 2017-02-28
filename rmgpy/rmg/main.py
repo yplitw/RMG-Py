@@ -165,8 +165,8 @@ class RMG(util.Subject):
         self.fluxToleranceKeepInEdge = 0.0
         self.fluxToleranceMoveToCore = 1.0
         self.fluxToleranceInterrupt = 1.0
-        self.reactionToleranceMoveToCore = numpy.inf
-        self.reactionToleranceInterrupt = numpy.inf
+        self.reactionToleranceMoveToCore = 0.5
+        self.reactionToleranceInterrupt = 0.5
         self.ignoreOverallFluxCriterion=False
         
         self.absoluteTolerance = 1.0e-8
