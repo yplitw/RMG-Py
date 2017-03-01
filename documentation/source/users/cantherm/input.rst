@@ -11,29 +11,79 @@ reading of the file.
 
 Each section is made up of one or more function calls, where parameters are 
 specified as text strings, numbers, or objects. Text strings must be wrapped in
-either single or double quotes. 
+either single or double quotes.
+
+The following is a list of all the functions of a CanTherm input file:
+
+=========================== =========================================================
+Function                    Description
+=========================== =========================================================
+``modelChemistry``          Level of theory from quantum chemical calculations
+``frequencyScaleFactor``    A factor by which to scale all frequencies
+``useHinderedRotors``       ``True`` if hindered rotors are used, ``False`` if not
+``useBondCorrections``      ``True`` if bond corrections are used, ``False`` if not
+``species``                 Contains parameters for non-transition states
+``transitionState``         Contains parameters for transition state(s)
+``reaction``                Required for performing kinetic computations
+``statmech``                Loads statistical mechanics parameters
+``thermo``                  Performs a thermodynamics computation
+``kinetics``                Performs a high-pressure limit kinetic computation
+=========================== =========================================================
+
+********* missing: network, pressureDependence ************
+
+Note that ``frequencyScaleFactor`` can defined glabally or per ``species()`` or
+``transitionState()`` function.
+
 
 Model Chemistry
 ===============
 
 The first item in the input file should be a ``modelChemistry()`` function,
-which accepts a string describing the model chemistry. Currently the 
-allowed model chemistries are:
-``'CBS-QB3'``
-``'G3'``
-``'M08SO/MG3S*'`` * indicates that the grid size used in the [QChem] electronic structure calculation utilized 75 radial points and 434 angular points
-``'CCSD(T)-F12/cc-pVnZ-F12'``  n = D, T, Q
-``'CCSD(T)-F12/aug-cc-pVnZ-F12'``  n = D, T, Q
-``'MP2_rmp2_pVnZ'``  n = D, T, Q
-``'FCI/cc-pVnZ'``  n = D, T, Q
-``'DFT_G03_b3lyp'``  a B3LYP calculation with a moderately large basis set
-``'BMK/cbsb7'`` or  ``'BMK/6-311G(2d,d,p)'``
+which accepts a string describing the model chemistry.
 
 CanTherm uses this information to adjust the computed energies to the usual gas-phase reference
-states by applying atom, bond and spin-orbit coupling energy corrections. This is particularly important for ``thermo()`` calculations (see below). The example below 
-demonstrates how to specify CBS-QB3 as a model chemistry::
+states by applying atom, bond and spin-orbit coupling energy corrections. This is particularly
+important for ``thermo()`` calculations (see below). Note that the user must specify under the
+``species()`` function the type and number of atoms and bonds for CanTherm to apply these corrections.
+The example below specifies CBS-QB3 as the model chemistry::
 
     modelChemistry("CBS-QB3")
+
+Currently, atomization energy corrections (AEC), bond corrections (BC), and spin orbit correction (SOC) are available for the following model chemistries:
+
+================================================ ===== ==== ====
+Model Chemistry                                  AEC   BC   SOC     
+================================================ ===== ==== ====
+``'CBS-QB3'``                                     v    v    v
+``'G3'``                                          v         v
+``'M08SO/MG3S*'``                                 v         v
+``'Klip_1'``                                      v         v
+``'Klip_2'`` *uses QCI(tz,qz) values*             v         v
+``'Klip_3'`` *uses QCI(dz,qz) values*             v         v
+``'Klip_2_cc'`` *uses CCSD(T)(tz,qz) values*      v         v
+``'CCSD-F12/cc-pVDZ-F12'``                        v         v
+``'CCSD(T)-F12/cc-pVDZ-F12_H-TZ'``                v         v
+``'CCSD(T)-F12/cc-pVDZ-F12_H-QZ'``                v         v
+``'CCSD(T)-F12/cc-pVnZ-F12'``, *n = D,T,Q*        v    v    v
+``'CCSD(T)-F12/cc-pVDZ-F12_noscale'``             v         v
+``'CCSD(T)-F12/cc-pCVnZ-F12'``, *n = D,T,Q*       v         v
+``'CCSD(T)-F12/aug-cc-pVnZ-F12'``, *n = D,T,Q*    v         v
+``'B-CCSD(T)-F12/cc-pVnZ-F12'``, *n = D,T,Q*      v         v
+``'B-CCSD(T)-F12/cc-pCVnZ-F12'``, *n = D,T,Q*     v         v
+``'B-CCSD(T)-F12/aug-cc-pVnZ-F12'``, *n = D,T,Q*  v         v
+``'DFT_G03_b3lyp'``                               v    v    v
+``'DFT_ks_b3lyp'``                                          v
+``'DFT_uks_b3lyp'``                                         v
+``'G03_PBEPBE_6-311++g_d_p'``                     v         v
+``'MP2_rmp2_pVnZ'``, *n = D,T,Q*                  v         v
+``'FCI/cc-pVnZ'``, *n = D,T,Q*                    v         v
+``'BMK/cbsb7'``                                   v    v    v
+``'BMK/6-311G(2d,d,p)'``                          v    v    v
+``'B3LYP/6-311+G(3df,2p)'``                            v
+================================================ ===== ==== ====
+
+Notes: In ``'M08SO/MG3S*'`` the grid size used in the [QChem] electronic structure calculation utilizes 75 radial points and 434 angular points. ``'DFT_G03_b3lyp'`` is a B3LYP calculation with a moderately large basis set.
 
 Species
 =======
@@ -45,23 +95,30 @@ which accepts the following parameters:
 Parameter              Description
 ====================== =========================================================
 ``label``              A unique string label used as an identifier
-``geomLog``            The path to the Gaussian log file containing the optimized geometry
-``statesLog``          The path to the Gaussian log file containing the computed frequencies
-``extSymmetry``        The external symmetry number for rotation
-``freqScaleFactor``    A factor by which to scale all frequencies
+``geometry``           The path to the quantum chemistry output file containing the optimized geometry
+``frequencies``        The path to the quantum chemistry output file containing the computed frequencies
+``externalSymmetry``   The external symmetry number for rotation
 ``linear``             ``True`` if the molecule is linear, ``False`` if not
-``rotors``             A list of :class:`HinderedRotor()` objects describing the hindered rotors
-``atoms``              A dict associating atom symbols with the number of each atom in the molecule
-``bonds``              A dict associating bond types with the number of each bond in the molecule      
+``rotors``             A list of :class:`HinderedRotor()` objects describing the hindered rotors (optional)
+``atoms``              Type and number of atoms in the species
+``bonds``              Type and number of bonds in the species
 ====================== =========================================================
 
-The geometry and states log files can be identical if you computed them in the
-same Gaussian output. Allowed atom symbols for the ``atoms`` parameter are 
-``'C'``, ``'H'``, ``'N'``, ``'O'``, and ``'P'``. Allowed bond types for the
-``bonds`` parameter are ``'C-H'``, ``'C-C'``, ``'C=C'``, ``'C#C'``, ``'O-H'``,
-``'C-O'``, ``'C-O'``, ``'C=O'``, ``'N#N'``, ``'O=O'``, ``'H-H'``, and
-``'C#N'``. In both cases you can omit atoms and bonds not present in your
-species, and their counts will be automatically set to zero.
+These parameters can be manually entered in the input file if known from the literture (e.g.,
+from `CCCBDB <http://cccbdb.nist.gov/>`_), or automatically parsed by pointing to the output
+file of a quantum chemistry calculation. In case of parsing, the externalSymmetry (see `thermo at CCCBDB <http://cccbdb.nist.gov/thermo.asp>`_ must still be manually entered.
+
+Allowed atom symbols for the ``atoms`` parameter are 
+``'C'``, ``'N'``, ``'O'``, ``'S'``, ``'P'``, and ``'H'``. For example, for formaldehyde we would write::
+
+    atoms = {'C': 1, 'O': 1, H': 2}
+
+Allowed bond types for the ``bonds`` parameter are, e.g., ``'C-H'``, ``'C-C'``, ``'C=C'``, ``'N-O'``, ``'C=S'``, ``'O=O'``, ``'C#N'``...
+
+(The element order is according to the order specified under "allowed atom symbols" above, i.e., ``'C=N'`` is correct while ``'N=C'`` is incorrect. Use ``-``/``=``/``#`` to denote a single/double/triple bond, respectively). For example, for formaldehyde we would write::
+
+    bonds = {'C=O': 1, 'C-H': 2}
+
 
 Each :class:`HinderedRotor()` object requires the following parameters:
 
@@ -78,10 +135,9 @@ The following is an example of a typical species item, based on ethane::
 
     species(
         label = 'ethane',
-        geomLog = 'ethane_cbs.log',
-        statesLog = 'ethane_cbs.log',
+        geometry = 'ethane_cbs.log',
+        frequencies = 'ethane_cbs.log',
         extSymmetry = 2,
-        freqScaleFactor = 0.99,
         linear = False,
         rotors = [
             HinderedRotor(scanLog='ethane_scan_1.log', pivots=[0,4], top=[0,1,2,3], symmetry=3),
@@ -90,25 +146,22 @@ The following is an example of a typical species item, based on ethane::
         bonds = {'C-C': 1, 'C-H': 6},
     )
 
-Note that the atoms identified within the rotor section should correspond to the geometry indicated by
-``geomLog``. 
+Note that the atoms identified within the rotor section should correspond to the indicated geometry. 
 
 Transition State
 ================
 
-Each transition state of interest must be specified using a 
-``transitionState()`` function, which accepts exactly the same parameters as
-the ``species()`` function described above. This is only required if you wish
-to perform a kinetics computation.
+Transition state(s) are only required when performimg kinetics computations.
+Each transition state of interest must be specified using a ``transitionState()``
+function, which is analogous to the ``species()`` function described above.
 
 The following is an example of a typical transition state item::
 
     transitionState(
-        label = 'TS', 
-        geomLog = 'H+C2H4.log', 
-        statesLog = 'H+C2H4.log', 
+        label = 'TS1', 
+        geometry = 'H+C2H4.log', 
+        frequencies = 'H+C2H4.log', 
         extSymmetry = 2,
-        freqScaleFactor = 0.99,
         linear = False, 
         rotors = [],
         atoms = {'C': 2, 'H': 5},
@@ -118,6 +171,7 @@ The following is an example of a typical transition state item::
 Reaction
 ========
 
+This is only required if you wish to perform a kinetics computation.
 Each reaction of interest must be specified using a ``reaction()`` function,
 which accepts the following parameters: 
 
@@ -128,10 +182,10 @@ Parameter              Description
 ``reactants``          A list of strings indicating the labels of the reactant species
 ``products``           A list of strings indicating the labels of the product species
 ``transitionState``    The string label of the transition state
+``tunneling``          Method of estimating the quantum tunneling factor (optional)
 ====================== =========================================================
 
-This is only required if you wish to perform a kinetics computation. The
-following is an example of a typical reaction item::
+The following is an example of a typical reaction function::
 
     reaction(
         label = 'H + C2H4 <=> C2H5',
@@ -141,39 +195,40 @@ following is an example of a typical reaction item::
         tunneling='Eckart'        
     )
 
-Note that in the above example, 'Wigner' is also an acceptable method of estimating the 
-quantum tunneling factor. 
+Note: the quantum tunneling factor method may be assigned either ``'Eckart'`` or ``'Wigner'``.
 
 Thermodynamics Computations
 ===========================
 
-Use a ``thermo()`` function to compute the thermodynamic parameters for a
-species. Pass the string label of the species you wish to compute the 
-thermodynamic parameters for and the type of thermodynamics model to
-generate (either ``'Wilhoit'`` or ''`NASA`'' for a Wilhoit polynomial
-model or NASA polynomial model). A table of thermodynamic parameters will
-also be displayed in the output file. 
+Use a ``thermo()`` function to make CanTherm execute the thermodynamic
+parameters computatiom for a species. Pass the string label of the species
+you wish to compute the  thermodynamic parameters for and the type of
+thermodynamics polynomial to generate (either ``'Wilhoit'`` or ''`NASA`'').
+A table of relevant thermodynamic parameters will also be displayed in the
+output file.
 
-Below is a typical ``thermo()`` function::
+Below is a typical ``thermo()`` execution function::
 
-    thermo('ethane', model='Wilhoit')
+    thermo('ethane', model='NASA')
 
 Kinetics Computations
 =====================
 
-Use a ``kinetics()`` function to compute the high-pressure limit kinetic parameters for a
-reaction.  If desired, define a desired temperature range and number of temperatures 
-at which the high-pressure rate coefficient will be tabulated and saved to 
-the outupt file. 3-parameter modified Arrhenius coefficients will automatically be fit 
-to the computed rate coefficients. The quantum tunneling factor will also be displayed
+Use a ``kinetics()`` function to make CanTherm execute the high-pressure limit kinetic
+parameters computation for a reaction. If desired, define a temperature range and number
+of temperatures at which the high-pressure rate coefficient will be tabulated and saved to 
+the outupt file. The 3-parameter modified Arrhenius coefficients will automatically be fit 
+to the computed rate coefficients. The quantum tunneling factor will also be displayed.
 
 Below is a typical ``kinetics()`` function::
 
     kinetics(    
     label = 'H + C2H4 <=> C2H5',
-    Tmin = (400,'K'), Tmax = (1200,'K'), Tcount = 6, 
-    Tlist = ([400,500,700,900,1100,1200],'K'),
+    Tmin = (400,'K'), Tmax = (1200,'K'), Tcount = 6,
     )
+
+If specific temperatures are desired, you may specify a list
+(``Tlist = ([400,500,700,900,1100,1200],'K')``) instead of Tmin, Tmax, and Tcount.
 
 This is also acceptable::
 
