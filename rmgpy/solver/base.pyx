@@ -35,6 +35,8 @@ cdef extern from "math.h":
 
 import numpy
 cimport numpy
+import scipy.sparse.linalg as spla
+import scipy.sparse as sp
 import rmgpy.constants as constants
 cimport rmgpy.constants as constants
 
@@ -227,7 +229,7 @@ cdef class ReactionSystem(DASx):
         self.bimolecularThreshold = numpy.zeros((self.numCoreSpecies, self.numCoreSpecies), bool)
         
         self.maxCoreSpeciesMetrics = numpy.zeros((self.numCoreSpecies),numpy.float64)
-        self.coreSpeciesMetricMatrix = numpy.matrix(numpy.zeros((self.numCoreSpecies,self.numCoreSpecies), numpy.float64))
+        self.coreSpeciesMetricMatrix = numpy.zeros((self.numCoreSpecies,self.numCoreSpecies))
         
         self.generate_species_reaction_indices()
         
@@ -393,7 +395,9 @@ cdef class ReactionSystem(DASx):
             for l, spec in enumerate(network.source):
                 i = self.get_species_index(spec)
                 self.networkIndices[j,l] = i
-
+                
+    
+    
     @cython.boundscheck(False)
     cpdef simulate(self, list coreSpecies, list coreReactions, list edgeSpecies, list edgeReactions,
         double toleranceKeepInEdge, double toleranceMoveToCore, double toleranceInterruptSimulation,double toleranceReactionMoveToCore=numpy.inf, double toleranceReactionInterruptSimulation=numpy.inf,
@@ -421,7 +425,7 @@ cdef class ReactionSystem(DASx):
         cdef numpy.ndarray[numpy.float64_t, ndim=1] maxCoreSpeciesRates, maxEdgeSpeciesRates, maxNetworkLeakRates,maxEdgeSpeciesRateRatios, maxNetworkLeakRateRatios, edgeSpeciesMetrics, aVec
         cdef numpy.ndarray[numpy.float64_t, ndim=2] coreSpeciesMetricMatrix
         cdef bint terminated
-        cdef object maxSpecies, maxNetwork, 
+        cdef object maxSpecies, maxNetwork, M
         cdef int i, j, k, index1, index2
         cdef numpy.ndarray[numpy.float64_t, ndim=1] forwardRateCoefficients, coreSpeciesConcentrations
         cdef double  prodfactor, consfactor, prevTime, totalMoles, c, volume, RTP, unimolecularThresholdVal, bimolecularThresholdVal, temp
@@ -461,6 +465,7 @@ cdef class ReactionSystem(DASx):
         maxNetworkRate = 0.0
         iteration = 0
         edgeSpeciesMetrics = numpy.zeros((numEdgeSpecies),numpy.float64)
+        aVec = numpy.zeros(numCoreSpecies)
         
         maxCoreSpeciesRates = self.maxCoreSpeciesRates
         maxEdgeSpeciesRates = self.maxEdgeSpeciesRates
@@ -575,6 +580,9 @@ cdef class ReactionSystem(DASx):
                     if index1 == index2:
                         coreSpeciesMetricMatrix[index1,index2] = -1.0
                         continue
+                    else:
+                        coreSpeciesMetricMatrix[index1,index2] = 0.0
+                        
                     coreSpc2ReactantInds = set(coreSpeciesReactionReactantInds[index2].keys()) #this is a set
                     coreSpc2ProductInds = set(coreSpeciesReactionProductInds[index2].keys()) #this is a set
                     
@@ -608,16 +616,43 @@ cdef class ReactionSystem(DASx):
                         consfactor = 0.0
                     else:
                         consfactor = consumption/coreSpeciesConsumptionRates[index2]
-                    
-                    coreSpeciesMetricMatrix[index1,index2] = toleranceReactionMoveToCore*(prodfactor+consfactor)
                         
                         
-            aVec = numpy.zeros(numCoreSpecies)
+                    coreSpeciesMetricMatrix[index1,index2] = abs(toleranceReactionMoveToCore*(prodfactor+consfactor))
+                        
+                        
+            
             for i in xrange(numCoreSpecies):
                 aVec[i] = -max(coreSpeciesProductionRates[i],coreSpeciesConsumptionRates[i])/charRate
-
-            coreSpeciesMetrics = numpy.linalg.solve(coreSpeciesMetricMatrix,aVec)
             
+#            logging.info('Ashape: '+str(coreSpeciesMetricMatrix.shape[0]))
+#            logging.info('Ashape: '+str(coreSpeciesMetricMatrix.shape[1]))
+#            logging.info('bshape: '+str(aVec.shape[0]))
+#            logging.info('A: '+str(coreSpeciesMetricMatrix))
+#            logging.info('b: '+str(aVec))
+#            M_x = lambda x: spla.spsolve(P, x)
+#            M = spla.LinearOperator((numCoreSpecies, numCoreSpecies), M_x)
+#            coreSpeciesMetrics = gmres(coreSpeciesMetricMatrix,aVec,tol=1e-10)
+            
+            #Mstar = spla.spilu(coreSpeciesMetricMatrix) #preconditioning
+            #M = spla.LinearOperator((numCoreSpecies,numCoreSpecies),lambda x: Mstar.solve(x)) #do in a separate non cythonized function to avoid the error with the lambda function
+            
+            #coreSpeciesMetrics = spla.gmres(coreSpeciesMetricMatrix,aVec,M=M)
+            coreSpeciesMetrics = solve_gmres(coreSpeciesMetricMatrix,aVec)
+            #logging.info('shape: '+str(coreSpeciesMetrics.shape[0])+' '+str(coreSpeciesMetrics.shape[1]))
+            #logging.info('cond: '+str(numpy.linalg.cond(coreSpeciesMetricMatrix)))
+            for i in xrange(len(coreSpeciesMetrics)):
+                if coreSpeciesMetrics[i] < -aVec[i]:
+                    coreSpeciesMetrics[i] = -aVec[i]
+                    
+            #coreSpeciesMetricMatrix = numpy.random.rand(numCoreSpecies,numCoreSpecies)
+            #aVec = numpy.random.rand(numCoreSpecies)
+            #coreSpeciesMetrics = nnls(coreSpeciesMetricMatrix,aVec/charRate**3)[0]*charRate**3
+            #res = nnls(coreSpeciesMetricMatrix,aVec/charRate**3)[1]*charRate**3
+            #logging.info('res: '+str(res))
+            #lsq_out = lsq_linear(coreSpeciesMetricMatrix,aVec*1.0e15,bounds=(0,numpy.inf))
+            #coreSpeciesMetrics = lsq_out.x
+            #logging.info('lsq_out_status: '+str(lsq_out.message))
 #            if (coreSpeciesMetrics<0).any(): #not exactly sure why it does this sometimes, but taking the abs highest magnitude seems to make chemical sense
 #                coreSpeciesMetrics = numpy.abs(coreSpeciesMetrics)
                
@@ -649,9 +684,9 @@ cdef class ReactionSystem(DASx):
                             consumption += abs(rate)* coreSpeciesReactionProductInds[index2][index] 
                     
                     if coreSpeciesProductionRates[index2] != 0:
-                        edgeSpeciesMetrics[index1] += abs(toleranceReactionMoveToCore*production/coreSpeciesProductionRates[index2]*coreSpeciesMetrics[index2])
+                        edgeSpeciesMetrics[index1] += toleranceReactionMoveToCore*(production/coreSpeciesProductionRates[index2])*coreSpeciesMetrics[index2]
                     if coreSpeciesConsumptionRates[index2] != 0:
-                        edgeSpeciesMetrics[index1] += abs(toleranceReactionMoveToCore*consumption/coreSpeciesConsumptionRates[index2]*coreSpeciesMetrics[index2])
+                        edgeSpeciesMetrics[index1] += toleranceReactionMoveToCore*(consumption/coreSpeciesConsumptionRates[index2])*coreSpeciesMetrics[index2]
                     
             
             #logging.info('EdgeSpeciesRateRatios: \n'+str(edgeSpeciesRateRatios)+'\n')
@@ -768,13 +803,13 @@ cdef class ReactionSystem(DASx):
                 logging.info('At time {0:10.4e} s, species {1} exceeded the normalized minimum species metric for moving to model core'.format(self.t, maxMetricSpecies))
                 self.logRates(charRate, maxMetricSpecies, maxSpeciesRate, 0.0, maxSpeciesMetric, maxNetwork, maxNetworkRate)
                 self.logConversions(speciesIndex, y0)
-                #logging.info('coreSpeciesMetricMatrix: \n'+str(coreSpeciesMetricMatrix))
-                #logging.info('coreSpeciesRateRatios: \n'+str(coreSpeciesRateRatios))
+                logging.info('coreSpeciesMetricMatrix: \n'+str(coreSpeciesMetricMatrix))
+                logging.info('coreSpeciesRateRatios: \n'+str(coreSpeciesRateRatios))
                 logging.info('coreSpeciesMetrics: \n'+str(coreSpeciesMetrics))
                 #logging.info('edgeSpecies: \n')
                 #for i in range(len(edgeSpecies)):
                 #    logging.info(edgeSpecies[i].label+' '+str(edgeSpeciesMetrics[i]))
-                #logging.info('EdgeSpeciesRateRatios: \n'+str(edgeSpeciesRateRatios)+'\n')
+                logging.info('EdgeSpeciesRateRatios: \n'+str(edgeSpeciesRateRatios)+'\n')
                 logging.info('EdgeSpeciesMetrics: \n'+str(edgeSpeciesMetrics)+'\n')
                 invalidObject = maxMetricSpecies
                 break
@@ -782,10 +817,10 @@ cdef class ReactionSystem(DASx):
                 logging.info('At time {0:10.4e} s, species {1} exceeded the normalized minimum species metric for moving to model core'.format(self.t, maxMetricSpecies))
                 self.logRates(charRate, maxMetricSpecies, maxSpeciesRate, 0.0, maxSpeciesMetric, maxNetwork, maxNetworkRate)
                 self.logConversions(speciesIndex, y0)
-                #logging.info('coreSpeciesRateRatios: \n'+str(coreSpeciesRateRatios))
+                logging.info('coreSpeciesRateRatios: \n'+str(coreSpeciesRateRatios))
                 logging.info('coreSpeciesMetrics: \n'+str(coreSpeciesMetrics))
                 #logging.info('edgeSpecies: \n'+str([str(i) for i in edgeSpecies]))
-                #logging.info('EdgeSpeciesRateRatios: \n'+str(edgeSpeciesRateRatios)+'\n')
+                logging.info('EdgeSpeciesRateRatios: \n'+str(edgeSpeciesRateRatios)+'\n')
                 logging.info('EdgeSpeciesMetrics: \n'+str(edgeSpeciesMetrics)+'\n')
                 invalidObject = maxMetricSpecies
                 break
@@ -994,7 +1029,22 @@ cdef class ReactionSystem(DASx):
         rateDeriv = V * rateDeriv
 
         return rateDeriv
-        
+
+###
+def solve_gmres(A,b,tol=1e-5):
+    """
+    solves Ax=b where b=aVec and A=coreSpeciesMetricMatrix
+    using gmres with an ilu based preconditioner 
+    """
+    n = A.shape[0]
+    assert n == A.shape[1], 'solve_gmres recieved wrong shape A'
+    assert n == len(b), 'solve_gmres recieved wrong shape b'
+    Msp = sp.csc_matrix(A) #in the future may want to just implement coreSpeciesMetricMatrix as a sparse matrix in simulate
+    Mstar = spla.spilu(Msp) #the preconditioning does not appear to be required, but in theory it should help
+    M = spla.LinearOperator((n,n),lambda x: Mstar.solve(x))
+    out = spla.gmres(Msp,b,tol=tol,M=M) #non iterative methods do not perform well on the matrices we are getting
+    assert out[1] == 0, 'GMRES failed with code: '+str(out[1])
+    return out[0]
 ################################################################################
 
 class TerminationTime:
