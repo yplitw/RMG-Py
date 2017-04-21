@@ -24,7 +24,7 @@ class TestGroupAdjLists(unittest.TestCase):
         """
         adjlist = """
 1 *2 {Cs,Cd} 0 {2,{S,D}} {3,S}
-2 *1 {Os,Od}  0   {1,{S,D}}
+2 *1 {O2s,O2d}  0   {1,{S,D}}
 3    R!H     {0,1} {1,S}
             """
         group = Group().fromAdjacencyList(adjlist)
@@ -42,8 +42,8 @@ class TestGroupAdjLists(unittest.TestCase):
         self.assertTrue(atom1.radicalElectrons == [0])
 
         self.assertTrue(atom2.label == '*1')
-        self.assertTrue(atom2.atomType[0].label in ['Os', 'Od'])
-        self.assertTrue(atom2.atomType[1].label in ['Os', 'Od'])
+        self.assertTrue(atom2.atomType[0].label in ['O2s', 'O2d'])
+        self.assertTrue(atom2.atomType[1].label in ['O2s', 'O2d'])
         self.assertTrue(atom2.radicalElectrons == [0])
 
         self.assertTrue(atom3.label == '')
@@ -59,9 +59,9 @@ class TestGroupAdjLists(unittest.TestCase):
         adjlist: Test the Group.fromAdjacencyList() method.
         """
         adjlist = """
-1 *2 [Cs,Cd] u0 {2,[S,D]} {3,S}
-2 *1 [Os,Od] u0 {1,[S,D]}
-3    R!H     u0 {1,S}
+1 *2 [Cs,Cd]   u0 {2,[S,D]} {3,S}
+2 *1 [O2s,O2d] u0 {1,[S,D]}
+3    R!H       u0 {1,S}
             """
         group = Group().fromAdjacencyList(adjlist)
         
@@ -78,8 +78,8 @@ class TestGroupAdjLists(unittest.TestCase):
         self.assertTrue(atom1.radicalElectrons == [0])
 
         self.assertTrue(atom2.label == '*1')
-        self.assertTrue(atom2.atomType[0].label in ['Os', 'Od'])
-        self.assertTrue(atom2.atomType[1].label in ['Os', 'Od'])
+        self.assertTrue(atom2.atomType[0].label in ['O2s', 'O2d'])
+        self.assertTrue(atom2.atomType[1].label in ['O2s', 'O2d'])
         self.assertTrue(atom2.radicalElectrons == [0])
         
         self.assertTrue(atom3.label == '')
@@ -116,9 +116,9 @@ class TestGroupAdjLists(unittest.TestCase):
         adjlist: Test the Group.toAdjacencyList() method.
         """
         adjlist = """
-1 *2 [Cs,Cd] u0 {2,[S,D]} {3,S}
-2 *1 [Os,Od] u0 {1,[S,D]}
-3    R!H     u0 {1,S}
+1 *2 [Cs,Cd]   u0 {2,[S,D]} {3,S}
+2 *1 [O2s,O2d] u0 {1,[S,D]}
+3    R!H       u0 {1,S}
             """
         group = Group().fromAdjacencyList(adjlist)
         adjlist2 = group.toAdjacencyList()

@@ -589,10 +589,10 @@ class GroupAtom(Vertex):
         #Instead we will set it to 0 here
 
         #Hard code charge for a few atomtypes
-        # if atomtype in [atomTypes[x] for x in ['N5d', 'N5dd', 'N5t', 'N5b', 'N5s']]:
+        # if atomtype in [atomTypes[x] for x in ['N5dc', 'N5dd', 'N5tc', 'N5b', 'N5sc']]:
         #     newAtom.lonePairs = 0
         #     newAtom.charge = 1
-        # elif atomtype in [atomTypes[x] for x in ['N1d']]:
+        # elif atomtype in [atomTypes[x] for x in ['N1dc']]:
         #     newAtom.charge = -1
         # elif newAtom.lonePairs == -100:
         #     newAtom.lonePairs = defaultLonePairs[newAtom.symbol]
@@ -1396,7 +1396,7 @@ class Group(Graph):
 
     def addExplicitLigands(self):
         """
-        This function Od/Sd ligand to CO or CS atomtypes if they are not already there.
+        This function O2d/S2d ligand to CO or CS atomtypes if they are not already there.
 
         Returns a 'True' if the group was modified otherwise returns 'False'
         """
@@ -1419,9 +1419,9 @@ class Group(Graph):
             modified = True
             atomtypes = None
             if self.atoms[atomIndex].atomType[0] is atomTypes['CO']:
-                atomtypes = ['Od']
+                atomtypes = ['O2d']
             elif self.atoms[atomIndex].atomType[0] is atomTypes['CS']:
-                atomtypes = ['Sd']
+                atomtypes = ['S2d']
             self.createAndConnectAtom(atomtypes, self.atoms[atomIndex], [2])
 
         return modified
@@ -1431,7 +1431,7 @@ class Group(Graph):
         This function modifies groups to make them have a standard AdjList form.
 
         Currently it makes atomtypes as specific as possible and makes CO/CS atomtypes
-        have explicit Od/Sd ligands. Other functions can be added as necessary
+        have explicit O2d/S2d ligands. Other functions can be added as necessary
 
         Returns a 'True' if the group was modified otherwise returns 'False'
         """
@@ -2027,9 +2027,9 @@ class Group(Graph):
                 else:
                     raise UnexpectedChargeError(graph = newMolecule)
                 #check hardcoded atomtypes
-                if groupAtom.atomType[0] in [atomTypes[x] for x in ['N5d', 'N5dd', 'N5t', 'N5b', 'N5s', 'Ot']] and atom.charge == 1:
+                if groupAtom.atomType[0] in [atomTypes[x] for x in ['N5dc', 'N5dd', 'N5tc', 'N5b', 'N5sc', 'O4tc']] and atom.charge == 1:
                     pass
-                elif groupAtom.atomType[0] in [atomTypes[x] for x in ['N1d', 'N2s']] and atom.charge == -1:
+                elif groupAtom.atomType[0] in [atomTypes[x] for x in ['N1dc', 'N1sc']] and atom.charge == -1:
                     pass
                 #declared charge in original group is not same as new charge
                 elif atom.charge in groupAtom.charge:

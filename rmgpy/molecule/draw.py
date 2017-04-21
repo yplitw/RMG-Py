@@ -175,7 +175,7 @@ class MoleculeDrawer:
         self.__findRingGroups()
         # Handle carbon monoxide special case
         if self.molecule.getFormula() == 'CO' and len(atomsToRemove) == 0:
-            # RDKit does not accept atom type Ot
+            # RDKit does not accept atom type O4tc
             self.molecule.removeAtom(self.molecule.atoms[-1])
             self.symbols = ['CO']
             self.molecule.atoms[0].charge = 0  # don't label the C as - if you're not drawing the O with a +
@@ -297,7 +297,7 @@ class MoleculeDrawer:
         flag_charge = 0
         
         for atom in self.molecule.atoms:
-            if atom.charge != 0: #atomType.label in ['N5s','N5d','N5dd','N5t','N5b']:
+            if atom.charge != 0: #atomType.label in ['N5sc','N5dc','N5dd','N5tc','N5b']:
                  flag_charge = 1
                  break
         
