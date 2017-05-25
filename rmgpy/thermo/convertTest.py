@@ -102,7 +102,7 @@ class TestConverter(unittest.TestCase):
             self.assertAlmostEqual(Cp_nasa, Cp_wilhoit, delta=1e0)
             H_wilhoit = wilhoit.getEnthalpy(T)
             H_nasa = nasa.getEnthalpy(T)
-            self.assertAlmostEqual(H_nasa, H_wilhoit, delta=2e1)
+            self.assertAlmostEqual(H_nasa, H_wilhoit, delta=7e1)
             S_wilhoit = wilhoit.getEntropy(T)
             S_nasa = nasa.getEntropy(T)
             self.assertAlmostEqual(S_nasa, S_wilhoit, delta=1e0)
@@ -221,11 +221,11 @@ class TestConverter(unittest.TestCase):
             self.assertAlmostEqual(Cp_1, Cp_2, delta=1e0)
             H_1 = wilhoit1.getEnthalpy(T)
             H_2 = wilhoit2.getEnthalpy(T)
-            self.assertAlmostEqual(H_1, H_2, delta=2e1)
+            self.assertAlmostEqual(H_1, H_2, delta=3e1)
             S_1 = wilhoit1.getEntropy(T)
             S_2 = wilhoit2.getEntropy(T)
             self.assertAlmostEqual(S_1, S_2, delta=1e0)
-        self.assertAlmostEqual(wilhoit1.E0.value_si, wilhoit2.E0.value_si, delta=1e1)
+        self.assertAlmostEqual(wilhoit1.E0.value_si, wilhoit2.E0.value_si, delta=2e1)
 
     def test_Wilhoit_ThermoData_Wilhoit(self):
         """
