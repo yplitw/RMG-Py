@@ -57,6 +57,68 @@ from rmgpy.thermo.thermoengine import processThermoData
 from rmgpy.data.thermo import findCp0andCpInf
 from rmgpy.data.rmg import getDB
 
+def initializeIsotopeModel(rmg, isotopes):
+    """
+    Initialize the RMG object by using the parameter species list
+    as initial species instead of the species from the RMG input file.
+
+    """
+    # Read input file
+    rmg.loadInput(rmg.inputFile)
+
+    # Check input file 
+    rmg.checkInput()
+
+    # Load databases
+    rmg.loadDatabase()
+
+    logging.info("isotope: Adding the isotopomers into the RMG model")
+    for spc in isotopes:
+        spec, isNew = rmg.reactionModel.makeNewSpecies(spc)
+        spec.thermo = spc.thermo        
+        if isNew:
+            rmg.reactionModel.addSpeciesToEdge(spec)
+            rmg.initialSpecies.append(spec)
+    logging.info("isotope: Adding standard species into the model")
+    for spec in rmg.initialSpecies:
+        spec.thermo = processThermoData(spec, spec.thermo)
+        if not spec.reactive:
+            rmg.reactionModel.enlarge(spec)
+    for spec in rmg.initialSpecies:
+        if spec.reactive:
+            rmg.reactionModel.enlarge(spec)
+    logging.info("isotope: Finalizing the species additions")
+    rmg.initializeReactionThresholdAndReactFlags()
+    rmg.reactionModel.initializeIndexSpeciesDict()
+
+
+def generateIsotopeModel(outputDirectory, rmg0, isotopes):
+    """
+    Replace the core species of the rmg model with the parameter list
+    of species.
+
+    Generate all reactions between new list of core species.
+
+    Returns created RMG object.
+    """
+    logging.debug("isotope: called generateIsotopeModel")
+    rmg = RMG(inputFile=rmg0.inputFile, outputDirectory=outputDirectory)
+    rmg.attach(ChemkinWriter(outputDirectory))
+
+    logging.info("isotope: making the isotope model for with all species")
+    initializeIsotopeModel(rmg, isotopes)
+
+    logging.info("isotope: enlarging the isotope model")
+    rmg.reactionModel.enlarge(reactEdge=True,
+        unimolecularReact=rmg.unimolecularReact,
+        bimolecularReact=rmg.bimolecularReact)
+
+    logging.info("isotope: saving files")
+    rmg.saveEverything()
+
+    rmg.finish()
+
+    return rmg
 
 def generateIsotopomers(spc, N=1):
     """
@@ -262,6 +324,20 @@ def compareIsotopomers(obj1, obj2, eitherDirection = True):
     redoIsotope(atomlist)
     return comparisonBool
 
+def generateRMGModel(inputFile, outputDirectory):
+    """
+    Generate the RMG-Py model NOT containing any non-normal isotopomers.
+
+    Returns created RMG object.
+    """
+    initializeLog(logging.INFO, os.path.join(outputDirectory, 'RMG.log'))
+    # generate mechanism:
+    rmg = RMG(inputFile = os.path.abspath(inputFile),
+            outputDirectory = os.path.abspath(outputDirectory)
+        )
+    rmg.execute()
+
+    return rmg
 def isEnriched(obj):
     """
     Returns True if the species or reaction object has any enriched isotopes.
@@ -281,3 +357,59 @@ def isEnriched(obj):
         return any(enriched)
     else:
         raise TypeError('isEnriched only takes species and reaction objects. {} was sent'.format(str(type(obj))))
+
+def run(inputFile, outputDir, original=None):
+    """
+    Accepts one input file with the RMG-Py model to generate. This file can contain 
+    the optional parameter 'maximumIsotopicAtoms' to reduce isotope labeling.
+
+    Firstly, generates the RMG model for the first input file. Takes the core species of that mechanism
+    and generates all isotopomers of those core species. Next, generates all reactions between the
+    generated pool of isotopomers, and writes it to file. 
+    """
+    logging.info("isotope: Starting the RMG isotope generation method 'run'")
+    if not original:
+        logging.info("isotope: original model not found, generating new one in directory `rmg`")
+        logging.info("isotope: check `rmg/RMG.log` for the rest of the logging info.")
+
+        outputdirRMG = os.path.join(outputDir, 'rmg')
+        os.mkdir(outputdirRMG)
+
+        rmg = generateRMGModel(inputFile, outputdirRMG)
+    else:
+        logging.info("isotope: original model being copied from previous RMG job in folder {}".format(original))
+        outputdirRMG = original
+        chemkinFile = os.path.join(outputdirRMG, 'chemkin', 'chem_annotated.inp')
+        dictFile = os.path.join(outputdirRMG, 'chemkin', 'species_dictionary.txt')
+        rmg = loadRMGJob(inputFile, chemkinFile, dictFile, generateImages=False, useChemkinNames=True)
+
+    logging.info("isotope: generating isotope model")
+    logging.info('Generating isotopomers for the core species in {}'.format(outputdirRMG))
+    isotopes = []
+
+    try:
+        speciesConstraints = getInput('speciesConstraints')
+    except Exception, e:
+        logging.debug('Species constraints could not be found.')
+        raise e
+
+    try:
+        maxIsotopes = speciesConstraints['maximumIsotopicAtoms']
+    except KeyError, e:
+        print ('Could not find the maxIsotopicAtoms constraint in the input file. Exiting...')
+        raise e
+    logging.info("isotope: adding all the new isotopomers")
+    for spc in rmg.reactionModel.core.species:
+        findCp0andCpInf(spc, spc.thermo)
+        isotopes.extend(generateIsotopomers(spc, maxIsotopes))
+
+    logging.info("isotope: adding original species to the model")
+    # add the original unlabeled species:
+    isotopes.extend(rmg.reactionModel.core.species)
+    logging.info('Number of isotopomers: {}'.format(len(isotopes)))
+
+    outputdirIso = os.path.join(outputDir, 'iso')
+    os.mkdir(outputdirIso)
+
+    logging.info('isotope: Generating RMG isotope model in {}'.format(outputdirIso))
+    generateIsotopeModel(outputdirIso, rmg, isotopes)
