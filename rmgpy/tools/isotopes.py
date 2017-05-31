@@ -338,6 +338,30 @@ def generateRMGModel(inputFile, outputDirectory):
     rmg.execute()
 
     return rmg
+
+def correctEntropy(isotopomer, isotopeless):
+    """
+    Correct the entropy of the isotopomer by the following correction for symmetry:
+
+    S(corrected) = S(original) + R*ln(sigma(isotopeless)) - R*ln(sigma(isotopomer))
+
+    This method also copies the Enthalpy, Cp and other thermo parameters from isotopeless
+    """
+
+    # calculate -R ln (sigma) in SI units (J/K/mol)
+    Sisotopeless = - constants.R * math.log(isotopeless.getSymmetryNumber())
+    Sisotopomer = - constants.R * math.log(isotopomer.getSymmetryNumber())
+
+    # convert species thermo to ThermoData object:
+    nasa = isotopomer.thermo
+
+    # apply correction to entropy at 298K
+    deltaS = Sisotopomer - Sisotopeless
+    nasa = nasa.changeBaseEntropy(deltaS)
+
+    # put the corrected thermo back as a species attribute:
+    isotopomer.thermo = nasa
+
 def isEnriched(obj):
     """
     Returns True if the species or reaction object has any enriched isotopes.
