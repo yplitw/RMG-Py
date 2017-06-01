@@ -77,6 +77,35 @@ def react(*spcTuples):
 
     reactionList = itertools.chain.from_iterable(results)
     return reactionList
+def _labelListOfSpecies(speciesTuple):
+    """
+    given a list or tuple of species' objects, ensure all their atoms' id are
+    independent.
+    
+    Modifies the speciesTuple in place, nothing returned.
+    """
+# assert that all species' atomlabels are different
+    def independentIDs():
+        num_atoms = 0
+        IDs = []
+        for species in speciesTuple:
+            num_atoms += len(species.molecule[0].atoms)
+            IDs.extend([atom.id for atom in species.molecule[0].atoms ])
+        num_ID = len(set(IDs))
+        return num_ID == num_atoms
+    # if they are different, relabel and remake atomIDs
+    counter = 100
+    while not independentIDs():
+        counter -= 1
+        if counter < 0:
+            raise ArithmeticError('_labelListOfSpecies exceeded max counts')
+        logging.info('identical atom ids found between species. regenerating')
+        for species in speciesTuple:
+            mol = species.molecule[0]
+            mol.assignAtomIDs()
+            # remake resonance isomers with new labeles
+            species.molecule = [mol]
+            species.generateResonanceIsomers(keepIsomorphic = True)
 
 def reactMolecules(moleculeTuples):
     """
