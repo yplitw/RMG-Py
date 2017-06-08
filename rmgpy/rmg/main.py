@@ -1194,8 +1194,9 @@ def processToSpeciesNetworks(obj,reactionSystem,coreSpecies):
         return list(processReactionsToSpecies(obj,coreSpecies))
     elif isinstance(obj,list): #list of species
         rspcs = processReactionsToSpecies([k for k in obj if isinstance(k,Reaction)],coreSpecies)
-        spcs = list({k for k in obj if isinstance(k,Species)} | rspcs)
-        nworks = list(set(processPdepNetworks([k for k in obj if isinstance(k,PDepNetwork)],reactionSystem)))
+        spcs = {k for k in obj if isinstance(k,Species)} | rspcs
+        nworks,pspcs = processPdepNetworks([k for k in obj if isinstance(k,PDepNetwork)],reactionSystem)
+        spcs = list(spcs-pspcs) #avoid duplicate species
         return spcs+nworks
     else:
         assert False, "improper call, obj input was incorrect"
@@ -1211,7 +1212,9 @@ def processPdepNetworks(obj,reactionSystem):
         ob = (obj, obj.getMaximumLeakSpecies(reactionSystem.T.value_si, reactionSystem.P.value_si))
         return ob
     elif isinstance(obj,list):
-        return [(ob, ob.getMaximumLeakSpecies(reactionSystem.T.value_si, reactionSystem.P.value_si)) for ob in obj]
+        spcs = [ob.getMaximumLeakSpecies(reactionSystem.T.value_si, reactionSystem.P.value_si) for ob in obj]
+        nworks = [(obj[i], spcs[i]) for i in xrange(len(obj))]
+        return nworks, set(spcs)
     else:
         assert False, "improper call, obj input was incorrect"
         
@@ -1226,13 +1229,8 @@ def processReactionsToSpecies(obj,coreSpecies):
     elif isinstance(obj,list) or isinstance(obj,set):
         potentialSpcs = set()
         for ob in obj:
-<<<<<<< HEAD
             potentialSpcs = potentialSpcs | set(ob.reactants+ob.products)
         potentialSpcs = {sp for sp in potentialSpcs if filterFcn(sp)}
-=======
-            potentialSpcs += set(ob.reactants+ob.products)
-        potentialSpcs = filter(filterFcn,potentialSpcs)
->>>>>>> cee701a... added handling for lists of object returned from simulate
     else:
         assert False, "improper call, obj input was incorrect"
     return potentialSpcs
