@@ -523,7 +523,7 @@ class CoreEdgeReactionModel:
 
         return forward
 
-    def enlarge(self, newObject=None, reactEdge=False, unimolecularReact=None, bimolecularReact=None):
+    def enlarge(self, newObject=None, reactEdge=False, unimolecularReact=None, bimolecularReact=None, reactionSystems=None, Ginfo=None):
         """
         Enlarge a reaction model by processing the objects in the list `newObject`. 
         If `newObject` is a
@@ -677,7 +677,17 @@ class CoreEdgeReactionModel:
             # Recalculate k(T,P) values for modified networks
             self.updateUnimolecularReactionNetworks()
             logging.info('')
-            
+        
+        #do gibbs filtering
+        if Ginfo:
+            Gmax = Ginfo[1]
+            Tmax = Ginfo[0]
+            if not numpy.isinf(Gmax.value_si):
+                for spc in self.edge.species[numOldEdgeSpecies:]:
+                    G = spc.thermo.getFreeEnergy(Tmax.value_si) #In SI already
+                    if G > Gmax.value_si:
+                        self.reactionModel.removeSpeciesFromEdge(reactionSystems,spc)
+                    
         # Check new core and edge reactions for Chemkin duplicates
         # The same duplicate reaction gets brought into the core
         # at the same time, so there is no danger in checking all of the edge.

@@ -535,6 +535,15 @@ class RMG(util.Subject):
 
         self.done = False
         
+        #get maximum temperature for Gibbs energy filtering
+        Tmax = self.reactionSystems[0].T
+        for r in self.reactionSystems:
+            if r.T > Tmax:
+                Tmax = r.T
+
+        
+        Ginfo = (Tmax,self.modelSettingsList[0].maxGibbsFreeEnergy)
+        
         # Initiate first reaction discovery step after adding all core species
         if self.filterReactions:
             # Run the reaction system to update threshold and react flags
@@ -555,13 +564,14 @@ class RMG(util.Subject):
 
         self.reactionModel.enlarge(reactEdge=True, 
             unimolecularReact=self.unimolecularReact, 
-            bimolecularReact=self.bimolecularReact)
+            bimolecularReact=self.bimolecularReact,reactionSystems=self.reactionSystems,
+            Ginfo=Ginfo)
 
         logging.info('Completed initial enlarge edge step...')
         self.saveEverything()
         
         assert len(self.modelSettingsList) == len(self.simulatorSettingsList), "different number of model and simulator declarations in input file with more than one simulator declaration"
-        
+    
         maxNumSpcsHit = False #default
         
         for q,modelSettings in enumerate(self.modelSettingsList):
@@ -571,6 +581,8 @@ class RMG(util.Subject):
                 simulatorSettings = self.simulatorSettingsList[0]
 
             logging.info('Beginning model generation stage {0}'.format(q+1))
+            
+            Ginfo = (Tmin,Tmax,modelSettings.maxGibbsFreeEnergy)
             
             self.done = False
 
@@ -675,7 +687,7 @@ class RMG(util.Subject):
 
                     # Add objects to enlarge to the core first
                     for objectToEnlarge in objectsToEnlarge:
-                        self.reactionModel.enlarge(objectToEnlarge)
+                        self.reactionModel.enlarge(objectToEnlarge,reactionSystems=self.reactionSystems,Ginfo=Ginfo)
                         
                     if len(self.reactionModel.core.species) > numCoreSpecies:
                         tempModelSettings = deepcopy(modelSettings)
@@ -707,7 +719,8 @@ class RMG(util.Subject):
                         
                         self.reactionModel.enlarge(reactEdge=True, 
                                 unimolecularReact=self.unimolecularReact, 
-                                bimolecularReact=self.bimolecularReact)
+                                bimolecularReact=self.bimolecularReact,
+                                reactionSystems=self.reactionSystems,Ginfo=Ginfo)
                     
                     #Adjust Surface
                     #we add added species and remove any species moved out of the core
@@ -715,7 +728,7 @@ class RMG(util.Subject):
                     #thus the surface algorithm currently (June 2017) is not implemented for pdep networks
                     self.reactionModel.surfaceSpecies = list(((surfSpcs | newSurfaceSpcsAdd)-newSurfaceSpcsLoss) & set(self.reactionModel.core.species))
                     self.reactionModel.surfaceReactions = list(((surfRxns | newSurfaceRxnsAdd)-newSurfaceRxnsLoss) & set(self.reactionModel.core.species))
-                        
+                    
                     maxNumSpcsHit = len(self.reactionModel.core.species) >= modelSettings.maxNumSpecies
 
                     if maxNumSpcsHit: #breaks the while loop 
