@@ -1600,7 +1600,7 @@ class KineticsFamily(Database):
             elif isinstance(products[0],Species):
                 products = [product.molecule for product in products]
             else:
-                raise TypeError('products input to __generateReactions must be Species or Reaction Objects')
+                raise TypeError('products input to __generateReactions must be Species or Molecule Objects')
             
             rxnList0 = rxnList[:]
             rxnList = []
