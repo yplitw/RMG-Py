@@ -1867,22 +1867,19 @@ class Molecule(Graph):
         """
         kekulize(self)
 
-    def assignAtomIDs(self, start=-1):
+    def assignAtomIDs(self):
         """
         Assigns an index to every atom in the molecule for tracking purposes.
-        If start is not specified, the system will use random integers for each index
-        Otherwise the system will start at `start` and increment one each time.
+        Uses entire range of cython's integer values to reduce chance of duplicates
         """
 
-        from random import randint
+        global atom_id_counter
+
         for i, atom in enumerate(self.atoms):
-            if start == -1:
-                # use entire range of integers to label atoms
-                atom.id = randint(-2**15,2**15)
-            else:
-                atom.id = i + start
-        if not self.atomIDValid():
-            self.assignAtomIDs(start=randint(-2**15,2**14))
+            atom.id = atom_id_counter
+            atom_id_counter += 1
+            if atom_id_counter == 2**15:
+                atom_id_counter = -2**15
 
     def atomIDValid(self):
         """
@@ -1928,3 +1925,8 @@ class Molecule(Graph):
         else:
             # The molecules don't have the same set of indices, so they are not identical
             return False
+
+
+# this variable is used to name atom IDs so that there are as few conflicts by 
+# using the entire space of integer objects
+atom_id_counter = -2**15
