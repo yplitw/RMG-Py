@@ -119,20 +119,15 @@ def _labelListOfSpecies(speciesTuple):
         num_ID = len(set(IDs))
         return num_ID == num_atoms
     # if they are different, relabel and remake atomIDs
-    counter = 100
-    while not independentIDs():
-        counter -= 1
-        if counter < 0:
-            raise ArithmeticError('_labelListOfSpecies exceeded max counts')
-        logging.info('identical atom ids found between species. regenerating')
+    if not independentIDs():
+        logging.debug('identical atom ids found between species. regenerating')
         for species in speciesTuple:
             mol = species.molecule[0]
             mol.assignAtomIDs()
             # remake resonance isomers with new labeles
             species.molecule = [mol]
             species.generateResonanceIsomers(keepIsomorphic = True)
-            
-    
+
 def getMoleculeTuples(speciesTuple):
     """
     returns a list of molule tuples from given speciesTuples.
