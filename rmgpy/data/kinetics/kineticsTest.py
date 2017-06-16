@@ -421,10 +421,10 @@ class TestReactionDegeneracy(unittest.TestCase):
     def test_degeneracy_keeps_track_of_both_rate_rules_from_resonance_isomers(self):
         """
         rxns that have multiple resonance structures hitting different rate rules should 
-        
-        
-        this test uses [H] + CC=C[CH]C -> H2 + [CH2]C=C[CH]C as an example. This reaction should have two transition
-        states.
+        be kept separate when findDegeneracy is used.
+
+        this test uses [H] + CC=C[CH]C -> H2 + [CH2]C=C[CH]C as an example. 
+        This reaction should have two transition states.
         """
         spcA = Species().fromSMILES('[H]')
         spcB = Species().fromSMILES('CC=C[CH]C')
