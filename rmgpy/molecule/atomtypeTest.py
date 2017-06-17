@@ -346,7 +346,7 @@ class TestGetAtomType(unittest.TestCase):
         """
         Test that getAtomType() returns appropriate nitrogen atom types.
         """
-        self.assertEqual(self.atomType(self.mol40, 3), 'N1sc')
+        self.assertEqual(self.atomType(self.mol40, 3), 'N0sc')
         self.assertEqual(self.atomType(self.mol41, 0), 'N1s')
         self.assertEqual(self.atomType(self.mol5, 3), 'N1d')
         self.assertEqual(self.atomType(self.mol39, 0), 'N2s')
