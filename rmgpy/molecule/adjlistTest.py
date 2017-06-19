@@ -508,8 +508,8 @@ class TestMoleculeAdjLists(unittest.TestCase):
         """
         adjlist: Test that improperly formed adjlists raise an InvalidAdjacencyListError.
         """
-        # Carbon with 1 radical and 3 lone pairs = 7 total electrons.  Should have -3 charge but doesn't
-        adjlist1 = "1 C u1 p3 c0"
+        # Carbon with 1 radical and 2 lone pairs = 5 total electrons.  Should have -1 charge but doesn't
+        adjlist1 = "1 C u1 p2 c0"
         
         with self.assertRaises(InvalidAdjacencyListError):
             Molecule().fromAdjacencyList(adjlist1)
