@@ -7966,7 +7966,8 @@ entry(
     label = "CdJ2_singlet",
     group = 
 """
-1 * [Cd,CO] u0 p1
+1 * C2d u0 p1 {2,D}
+2   R!H u0 px {1,D}
 """,
     thermo = u'CCdJ2_singlet',
     shortDesc = u"""""",
@@ -7981,8 +7982,8 @@ entry(
     label = "CCdJ2_singlet",
     group = 
 """
-1 * Cd u0 p1 {2,D}
-2   C  u0 {1,D}
+1 * C2d u0 p1 {2,D}
+2   C   u0 px {1,D}
 """,
     thermo = ThermoData(
         Tdata = ([300,400,500,600,800,1000,1500],'K'),
