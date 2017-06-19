@@ -122,15 +122,15 @@ multiplicity 1
         "Test that we can obtain solute parameters via group additivity for an amide"        
         molecule=Molecule().fromAdjacencyList(
 """
-1  N u0 p1 {2,S} {3,S} {4,S}
-2   H   u0 {1,S}
-3   C u0 {1,S} {6,S} {7,S} {8,S}
-4   C  u0 {1,S} {5,D} {9,S}
-5   O  u0 p2 {4,D}
-6   H   u0 {3,S}
-7   H   u0 {3,S}
-8   H   u0 {3,S}
-9   H   u0 {4,S}
+1 N u0 p1 {2,S} {3,S} {4,S}
+2 H u0 {1,S}
+3 C u0 {1,S} {6,S} {7,S} {8,S}
+4 C u0 {1,S} {5,D} {9,S}
+5 O u0 p2 {4,D}
+6 H u0 {3,S}
+7 H u0 {3,S}
+8 H u0 {3,S}
+9 H u0 {4,S}
 """)
         species = Species(molecule=[molecule])
         soluteData = self.database.getSoluteDataFromGroups(species)
@@ -140,8 +140,8 @@ multiplicity 1
         "Test that we can obtain solute parameters via group additivity for CO."        
         molecule=Molecule().fromAdjacencyList(
 """
-1  C2tc u0 p1 c-1 {2,T}
-2  O4tc u0 p1 c+1 {1,T}
+1  C u0 p1 c-1 {2,T}
+2  O u0 p1 c+1 {1,T}
 """)
         species = Species(molecule=[molecule])
         soluteData = self.database.getSoluteDataFromGroups(species)
