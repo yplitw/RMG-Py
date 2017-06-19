@@ -140,8 +140,8 @@ multiplicity 1
         "Test that we can obtain solute parameters via group additivity for CO."        
         molecule=Molecule().fromAdjacencyList(
 """
-1  C u0 p1 c-1 {2,T}
-2  O u0 p1 c+1 {1,T}
+1  C2tc u0 p1 c-1 {2,T}
+2  O4tc u0 p1 c+1 {1,T}
 """)
         species = Species(molecule=[molecule])
         soluteData = self.database.getSoluteDataFromGroups(species)
