@@ -8003,7 +8003,7 @@ entry(
     label = "CO",
     group = 
 """
-1 * CO  u0 p1 {2,D}
+1 * C2d u0 p1 {2,D}
 2   O2d u0 p2 {1,D}
 """,
     thermo = ThermoData(
