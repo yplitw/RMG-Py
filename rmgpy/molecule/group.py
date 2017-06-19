@@ -88,6 +88,7 @@ class GroupAtom(Vertex):
     `charge`            ``list``            The allowed formal charges (as short integers)
     `label`             ``str``             A string label that can be used to tag individual atoms
     `lonePairs`         ``list``            The number of lone electron pairs
+    'charge'            ''list''            The partial charge of the atom
     =================== =================== ====================================
 
     Each list represents a logical OR construct, i.e. an atom will match the
