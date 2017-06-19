@@ -276,7 +276,7 @@ atomTypes['C'   ] = AtomType('C',    generic=['R','R!H','Val4'],      specific=[
                              single=[], allDouble=[], rDouble=[], oDouble=[], sDouble=[], triple=[], benzene=[], lonePairs=[], charge=[])
 atomTypes['Ca'  ] = AtomType('Ca',   generic=['R','R!H','C','Val4'],  specific=[],
                              single=[0], allDouble=[0], rDouble=[], oDouble=[], sDouble=[], triple=[0], benzene=[0], lonePairs=[2], charge=[0])
-#examples for Cs: atomic carbon (closed shell)
+#examples for Ca: atomic carbon (closed shell)
 atomTypes['Cs'  ] = AtomType('Cs',   generic=['R','R!H','C','Val4'],  specific=[],
                              single=[], allDouble=[0], rDouble=[], oDouble=[], sDouble=[], triple=[0], benzene=[0], lonePairs=[0], charge=[0,+1])
 #examples for Cs: C, CC, C1=CCC([O-])[CH+]1
@@ -535,8 +535,8 @@ atomTypes['He'  ].setActions(incrementBond=[],               decrementBond=[],  
 
 atomTypes['C'   ].setActions(incrementBond=['C'],            decrementBond=['C'],            formBond=['C'],         breakBond=['C'],         incrementRadical=['C'],    decrementRadical=['C'],    incrementLonePair=['C'],   decrementLonePair=['C'])
 atomTypes['Ca'  ].setActions(incrementBond=[],               decrementBond=[],               formBond=[],            breakBond=[],            incrementRadical=[],       decrementRadical=[],       incrementLonePair=[],      decrementLonePair=['C2s'])
-atomTypes['Cs'  ].setActions(incrementBond=['Cd','CO','CS'], decrementBond=[],               formBond=['Cs','Csc'],  breakBond=['Cs'],        incrementRadical=['Cs'],   decrementRadical=['Cs'],   incrementLonePair=['C2s'], decrementLonePair=[])
-atomTypes['Csc' ].setActions(incrementBond=['Cdc'],          decrementBond=[],               formBond=['Csc'],       breakBond=['Csc','Cs'],  incrementRadical=['Csc'],  decrementRadical=['Csc'],  incrementLonePair=['C2sc'],decrementLonePair=[])
+atomTypes['Cs'  ].setActions(incrementBond=['Cd','CO','CS'], decrementBond=[],               formBond=['Cs','Csc'],  breakBond=['Cs'],        incrementRadical=['Cs'],   decrementRadical=['Cs'],   incrementLonePair=['C2s'], decrementLonePair=['C2s'])
+atomTypes['Csc' ].setActions(incrementBond=['Cdc'],          decrementBond=[],               formBond=['Csc'],       breakBond=['Csc','Cs'],  incrementRadical=['Csc'],  decrementRadical=['Csc'],  incrementLonePair=['C2sc'],decrementLonePair=['C2sc'])
 atomTypes['Cd'  ].setActions(incrementBond=['Cdd','Ct','C2tc'],decrementBond=['Cs'],         formBond=['Cd','Cdc'],  breakBond=['Cd'],        incrementRadical=['Cd'],   decrementRadical=['Cd'],   incrementLonePair=['C2d'], decrementLonePair=[])
 atomTypes['CO'  ].setActions(incrementBond=['Cdd','C2tc'],   decrementBond=['Cs'],           formBond=['CO','Cdc'],  breakBond=['CO'],        incrementRadical=['CO'],   decrementRadical=['CO'],   incrementLonePair=['C2d'], decrementLonePair=[])
 atomTypes['CS'  ].setActions(incrementBond=['Cdd','C2tc'],   decrementBond=['Cs'],           formBond=['CS','Cdc'],  breakBond=['CS'],        incrementRadical=['CS'],   decrementRadical=['CS'],   incrementLonePair=['C2d'], decrementLonePair=[])
