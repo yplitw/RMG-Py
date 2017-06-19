@@ -215,7 +215,8 @@ class AtomType:
                   self.sDouble,
                   self.triple,
                   self.benzene,
-                  self.lonePairs,]
+                  self.lonePairs,
+                  self.charge]
         return features
 
 ################################################################################
