@@ -8024,8 +8024,8 @@ entry(
     label = "CdJ2-Sd_singlet",
     group = 
 """
-1 * CS u0 p1 {2,D}
-2   S2d u0 {1,D}
+1 * C2d u0 p1 {2,D}
+2   S2d u0 p2 {1,D}
 """,
     thermo = ThermoData(
         Tdata = ([300,400,500,600,800,1000,1500],'K'),
@@ -8498,7 +8498,7 @@ L1: Radical
             L4: CdJ2_singlet
                 L5: CCdJ2_singlet
                 L5: CO
-            L4: CdJ2-Sd_singlet
+                L5: CdJ2-Sd_singlet
         L3: Oa_singlet
         L3: SiJ2_singlet
         L3: SJ2_singlet
