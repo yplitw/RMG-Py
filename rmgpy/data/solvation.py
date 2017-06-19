@@ -805,8 +805,10 @@ class SolvationDatabase(object):
         # Convert lone pairs to radicals, then saturate with H.
        
         # Change lone pairs to radicals based on valency
-        if sum([atom.lonePairs for atom in saturatedStruct.atoms]) > 0: # molecule contains lone pairs
-            saturatedStruct, addedToPairs = self.transformLonePairs(saturatedStruct)
+        # if sum([atom.lonePairs for atom in saturatedStruct.atoms]) > 0: # molecule contains lone pairs
+        #     saturatedStruct, addedToPairs = self.transformLonePairs(saturatedStruct)
+        # Commented-out. Carbenes in database should have pointers to bi-rads instead of this method which
+        # is problematic in the way it deals with carbon monoxide
 
         # Now saturate radicals with H
         if sum([atom.radicalElectrons for atom in saturatedStruct.atoms]) > 0: # radical species
