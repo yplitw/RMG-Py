@@ -181,7 +181,6 @@ class Predictor(object):
 		fpath = os.path.join(save_model_path, 'full_train')
 		self.save_model(loss, inner_val_loss, mean_outer_val_loss, mean_test_loss, fpath)
 
-
 	def kfcv_batch_train(self, folds, batch_size=50):
 
 		# prepare data for training
@@ -233,6 +232,18 @@ class Predictor(object):
 			# once finish training one fold, reset the model
 			self.reset_model()
 
+	def uncertainty_train(self, save_model_path):
+
+		# prepare data for training
+		folded_data = prepare_full_train_data_from_multiple_datasets(self.datasets, 
+																self.add_extra_atom_attribute, 
+																self.add_extra_bond_attribute,
+																self.padding,
+																self.padding_final_size)
+
+		X_test, y_test, X_train, y_train = folded_data
+		self.model.fit(np.array(X_train), np.array(y_train), n_epoch=50)
+		self.model.save(save_model_path)
 
 	def load_parameters(self, param_path=None):
 

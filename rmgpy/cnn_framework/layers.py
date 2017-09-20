@@ -25,9 +25,9 @@ class MoleculeConv(Layer):
 		self.padding = padding
 
 		self.initial_weights = None
-		self.input_dim = 4 # each entry is a 3D N_atom x N_atom x N_feature tensor
-		if self.input_dim:
-			kwargs['input_shape'] = (None, None, None,) # 3D tensor for each input
+		# self.input_dim = 4 # each entry is a 3D N_atom x N_atom x N_feature tensor
+		# if self.input_dim:
+		# 	kwargs['input_shape'] = (None, None, None,) # 3D tensor for each input
 		#self.input = K.placeholder(ndim = 4)
 		super(MoleculeConv, self).__init__(**kwargs)
 

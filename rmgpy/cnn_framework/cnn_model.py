@@ -1,7 +1,9 @@
 from __future__ import print_function
 from .layers import MoleculeConv
-from keras.models import Sequential
+from .uncertainty import RandomMask, EnsembleModel
+from keras.models import Model
 from keras.layers.core import Dense
+from keras.layers import Input
 from keras.optimizers import RMSprop, Adam
 import numpy as np
 import theano.tensor as T 
@@ -19,32 +21,57 @@ def build_model(embedding_size=512, attribute_vector_size=33, depth=5,
                 mol_conv_outer_activation='softmax',
 				hidden=50, hidden_activation='tanh',
 				output_activation='linear', output_size=1, 
-				lr=0.01, optimizer='adam', loss='mse'):
+				lr=0.01, optimizer='adam', loss='mse',
+				p=0.05, uncertainty=False):
 
 	"""
 	build generic cnn model that takes molecule tensor and predict output 
 	with size of output_size.
 	"""
 	
-	model = Sequential()
+	#model = Sequential()
 
-	model.add(MoleculeConv(units=embedding_size, 
+	# model.add(MoleculeConv(units=embedding_size, 
+	# 	inner_dim=attribute_vector_size-1, 
+	# 	depth=depth,
+	# 	scale_output=scale_output,
+	# 	padding=padding,
+	# 	activation_inner=mol_conv_inner_activation,
+	# 	activation_output=mol_conv_outer_activation))
+	# 
+	# logging.info('cnn_model: added MoleculeConv layer ({} -> {})'.format('mol', embedding_size))
+	# if hidden > 0:
+	# 	
+	# 	model.add(Dense(hidden, activation=hidden_activation))
+	# 	logging.info('cnn_model: added {} Dense layer (-> {})'.format(hidden_activation, hidden))
+	# 	
+	# model.add(Dense(output_size, activation=output_activation))
+	# logging.info('cnn_model: added {} Dense layer (-> {})'.format(output_activation, output_size))
+	
+	inputs = Input(shape=(None, None, None)) # 3D tensor for each input
+	x = MoleculeConv(units=embedding_size, 
 		inner_dim=attribute_vector_size-1, 
 		depth=depth,
 		scale_output=scale_output,
 		padding=padding,
 		activation_inner=mol_conv_inner_activation,
-		activation_output=mol_conv_outer_activation))
-	
+		activation_output=mol_conv_outer_activation)(inputs)
+
 	logging.info('cnn_model: added MoleculeConv layer ({} -> {})'.format('mol', embedding_size))
 	if hidden > 0:
-		
-		model.add(Dense(hidden, activation=hidden_activation))
+		if uncertainty: x = RandomMask(p)(x)
+		x= Dense(hidden, activation=hidden_activation)(x)
 		logging.info('cnn_model: added {} Dense layer (-> {})'.format(hidden_activation, hidden))
-		
-	model.add(Dense(output_size, activation=output_activation))
+	
+	if uncertainty: x = RandomMask(p)(x)
+	y = Dense(output_size, activation=output_activation)(x)
 	logging.info('cnn_model: added {} Dense layer (-> {})'.format(output_activation, output_size))
-
+	
+	if uncertainty:
+		model = EnsembleModel(input=inputs, output=y, seeds=np.random.randint(0, 10e8, 10).tolist())
+	else:
+		model = Model(input=inputs, output=y)
+	
 	# Compile
 	if optimizer == 'adam':
 		optimizer = Adam(lr=lr)

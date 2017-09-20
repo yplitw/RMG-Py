@@ -14,7 +14,7 @@ def predictor_model(embedding_size=512, attribute_vector_size=None, depth=2,
                 mol_conv_outer_activation='softmax',
                 hidden=0, hidden_activation='tanh',
                 output_activation='linear', output_size=1, 
-                lr=0.01, optimizer='adam', loss='mse'):
+                lr=0.01, optimizer='adam', loss='mse', uncertainty=False):
     
     if attribute_vector_size is None:
         attribute_vector_size = get_attribute_vector_size(\
@@ -27,7 +27,7 @@ def predictor_model(embedding_size=512, attribute_vector_size=None, depth=2,
                 mol_conv_outer_activation,
                 hidden, hidden_activation,
                 output_activation, output_size, 
-                lr, optimizer, loss)
+                lr, optimizer, loss, uncertainty=uncertainty)
     
     predictor.model = model
     predictor.add_extra_atom_attribute = add_extra_atom_attribute
