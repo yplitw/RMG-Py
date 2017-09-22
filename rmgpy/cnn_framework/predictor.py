@@ -164,7 +164,7 @@ class Predictor(object):
 										y_test,
 										X_outer_val=None,
 										y_outer_val=None, 
-										nb_epoch=150,
+										nb_epoch=2,
 										batch_size=batch_size, 
 										lr_func=lr_func, 
 										patience=10)
@@ -232,19 +232,6 @@ class Predictor(object):
 			# once finish training one fold, reset the model
 			self.reset_model()
 
-	def uncertainty_train(self, save_model_path):
-
-		# prepare data for training
-		folded_data = prepare_full_train_data_from_multiple_datasets(self.datasets, 
-																self.add_extra_atom_attribute, 
-																self.add_extra_bond_attribute,
-																self.padding,
-																self.padding_final_size)
-
-		X_test, y_test, X_train, y_train = folded_data
-		self.model.fit(np.array(X_train), np.array(y_train), n_epoch=50)
-		self.model.save(save_model_path)
-
 	def load_parameters(self, param_path=None):
 
 		if not param_path:
@@ -273,3 +260,12 @@ class Predictor(object):
 			molecule_tensor = pad_molecule_tensor(molecule_tensor, self.padding_final_size)
 		molecule_tensor_array = np.array([molecule_tensor])
 		return self.model.predict(molecule_tensor_array)[0][0]
+	
+	def variance(self, molecule):
+
+		molecule_tensor = get_molecule_tensor(molecule, \
+							self.add_extra_atom_attribute, self.add_extra_bond_attribute)
+		if self.padding:
+			molecule_tensor = pad_molecule_tensor(molecule_tensor, self.padding_final_size)
+		molecule_tensor_array = np.array([molecule_tensor])
+		return self.model.variance(molecule_tensor_array)[0][0]
