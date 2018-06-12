@@ -19,10 +19,12 @@ def build_model(embedding_size=512, attribute_vector_size=33, depth=5,
 				scale_output=0.05, padding=False, 
 				mol_conv_inner_activation='tanh',
                 mol_conv_outer_activation='softmax',
-				hidden=50, hidden_activation='tanh',
+				hidden=50, hidden_depth=1, hidden_activation='tanh',
 				output_activation='linear', output_size=1, 
 				lr=0.01, optimizer='adam', loss='mse',
-				dropout_rate_inner=0.0, dropout_rate_output=0.0, dropout_rate_dense=0.0):
+				dropout_rate_inner=0.0, dropout_rate_outer=0.0,
+				dropout_rate_hidden=0.0, dropout_rate_output=0.0,
+				n_model=None, padding_final_size=None):
 
 	"""
 	build generic cnn model that takes molecule tensor and predict output 
@@ -57,22 +59,26 @@ def build_model(embedding_size=512, attribute_vector_size=33, depth=5,
 		activation_inner=mol_conv_inner_activation,
 		activation_output=mol_conv_outer_activation,
 		dropout_rate_inner=dropout_rate_inner,
-		dropout_rate_output=dropout_rate_output)(inputs)
+		dropout_rate_outer=dropout_rate_outer,
+		padding_final_size=padding_final_size)(inputs)
 
 	logging.info('cnn_model: added MoleculeConv layer ({} -> {})'.format('mol', embedding_size))
 	if hidden > 0:
-		if dropout_rate_dense!=0.0: x = RandomMask(dropout_rate_dense)(x)
-		x= Dense(hidden, activation=hidden_activation)(x)
-		logging.info('cnn_model: added {} Dense layer (-> {})'.format(hidden_activation, hidden))
+		for i in range(hidden_depth):
+			if dropout_rate_hidden!=0.0: x = RandomMask(dropout_rate_hidden)(x)
+			x= Dense(hidden, activation=hidden_activation)(x)
+			logging.info('cnn_model: added {} Dense layer (-> {})'.format(hidden_activation, hidden))
 	
-	if dropout_rate_dense!=0.0: x = RandomMask(dropout_rate_dense)(x)
+	if dropout_rate_output!=0.0: x = RandomMask(dropout_rate_output)(x)
 	y = Dense(output_size, activation=output_activation)(x)
 	logging.info('cnn_model: added {} Dense layer (-> {})'.format(output_activation, output_size))
 	
-	if dropout_rate_dense!=0.0 or dropout_rate_inner!=0.0 or dropout_rate_output!=0.0:
-		model = EnsembleModel(input=inputs, output=y, seeds=np.random.randint(0, 10e8, 10).tolist())
-	else:
+	if n_model is None:
 		model = Model(input=inputs, output=y)
+	elif n_model != 0: 
+		model = EnsembleModel(input=inputs, output=y, seeds=np.random.randint(0, 10e8, n_model).tolist())
+	else:
+		model = EnsembleModel(input=inputs, output=y)
 	
 	# Compile
 	if optimizer == 'adam':
@@ -138,8 +144,7 @@ def train_model(model,
 		wait = 0
 		prev_best_inner_val_loss = 99999999
 		for i in range(nb_epoch):
-			if 'set_weight_generators' in dir(model): model.set_weight_generators()
-			
+			#if 'set_weight_generators' in dir(model): model.set_weight_generators()
 			logging.info('\nEpoch {}/{}, lr = {}'.format(i + 1, nb_epoch, lr(i)))
 			this_loss = []
 			this_inner_val_loss = []
@@ -153,7 +158,11 @@ def train_model(model,
 
 			training_order = range(training_size)
 			np.random.shuffle(training_order)
-			for batch_idx in range(batch_num):
+			# logging.info('----------------------------------')
+			# logging.info('\tBatch\tLoss')
+			# logging.info('----------------------------------')
+		#	if 'reset_mask_id' in dir(model): model.reset_mask_id()
+			for k, batch_idx in enumerate(range(batch_num)):
 
 				start = batch_idx * batch_size
 				end = min(start + batch_size, training_size)
@@ -161,13 +170,15 @@ def train_model(model,
 				single_mol_as_array = X_train[training_order[start:end]]
 				single_y_as_array = y_train[training_order[start:end]]
 				sloss = model.train_on_batch(single_mol_as_array, single_y_as_array)
+				#logging.info('\t{}\t{}'.format(k, sloss))
 				this_loss.append(sloss)
-
+			# logging.info('----------------------------------')
 			epoch_training_end = time.time()
 			
 			logging.info('Training takes {0:0.1f} secs..'.format(epoch_training_end - epoch_training_start ))
 			# Run through testing set
 			logging.info('Inner Validating..')
+		#	if 'reset_mask_id' in dir(model): model.reset_mask_id()
 			for j in range(len(X_inner_val)):
 				single_mol_as_array = np.array(X_inner_val[j:j+1])
 				single_y_as_array = np.reshape(y_inner_val[j], (1, -1))
@@ -221,6 +232,7 @@ def evaluate_mean_tst_loss(model, X_test, y_test):
 	returns mean test loss: a float number
 	"""
 	test_losses = []
+#	if 'reset_mask_id' in dir(model): model.reset_mask_id()
 	for j in range(len(X_test)):
 		single_mol_as_array = np.array(X_test[j:j+1])
 		single_y_as_array = np.reshape(y_test[j], (1, -1))

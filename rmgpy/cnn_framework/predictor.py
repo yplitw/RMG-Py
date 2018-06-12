@@ -10,6 +10,8 @@ from .data import (prepare_data_one_fold, prepare_folded_data_from_multiple_data
 import logging
 from keras.callbacks import EarlyStopping
 import json
+from .layers import MoleculeConv
+from .uncertainty import RandomMask, EnsembleModel
 
 class Predictor(object):
 
@@ -34,6 +36,7 @@ class Predictor(object):
 										'datasets.txt'
 										)
 		self.specify_datasets(self.datasets_file)
+		
 	def build_model(self):
 		"""
 		This method is intended to provide a way to build default model 
@@ -96,7 +99,7 @@ class Predictor(object):
 											y_test,
 											X_outer_val,
 											y_outer_val, 
-											nb_epoch=150,
+											nb_epoch=self.max_epoch,
 											batch_size=batch_size, 
 											lr_func=lr_func, 
 											patience=10)
@@ -164,7 +167,7 @@ class Predictor(object):
 										y_test,
 										X_outer_val=None,
 										y_outer_val=None, 
-										nb_epoch=2,
+										nb_epoch=self.max_epoch,
 										batch_size=batch_size, 
 										lr_func=lr_func, 
 										patience=10)
@@ -212,7 +215,7 @@ class Predictor(object):
 			history_callback = self.model.fit(np.array(X_train), 
 							np.array(y_train), 
 							callbacks=[earlyStopping], 
-							nb_epoch=150, 
+							nb_epoch=self.max_epoch, 
 							batch_size=batch_size, 
 							validation_split=0.1)
 
@@ -231,6 +234,12 @@ class Predictor(object):
 
 			# once finish training one fold, reset the model
 			self.reset_model()
+	
+        def load_architecture(self, param_path=None):
+                from keras.models import model_from_json
+                f = open(param_path,'r').read()
+                self.model = model_from_json(json.loads(f), custom_objects={"EnsembleModel":EnsembleModel,
+                            "RandomMask":RandomMask, "MoleculeConv":MoleculeConv})
 
 	def load_parameters(self, param_path=None):
 
@@ -252,20 +261,15 @@ class Predictor(object):
 
 		save_model(self.model, loss, inner_val_loss, mean_outer_val_loss, mean_test_loss, fpath)
 
-	def predict(self, molecule):
+	def predict(self, molecule, std=False):
 
 		molecule_tensor = get_molecule_tensor(molecule, \
 							self.add_extra_atom_attribute, self.add_extra_bond_attribute)
 		if self.padding:
 			molecule_tensor = pad_molecule_tensor(molecule_tensor, self.padding_final_size)
 		molecule_tensor_array = np.array([molecule_tensor])
+		if std:
+			Y_avg, Y_std = self.model.predict(molecule_tensor_array, std=True)
+			return Y_avg[0][0], Y_std[0][0]
 		return self.model.predict(molecule_tensor_array)[0][0]
 	
-	def variance(self, molecule):
-
-		molecule_tensor = get_molecule_tensor(molecule, \
-							self.add_extra_atom_attribute, self.add_extra_bond_attribute)
-		if self.padding:
-			molecule_tensor = pad_molecule_tensor(molecule_tensor, self.padding_final_size)
-		molecule_tensor_array = np.array([molecule_tensor])
-		return self.model.variance(molecule_tensor_array)[0][0]

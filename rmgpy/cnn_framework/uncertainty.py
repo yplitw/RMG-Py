@@ -5,94 +5,79 @@ from keras.models import Model
 import time
 
 class EnsembleModel(Model):
-    def __init__(self, seeds=[], **kwargs):
+    def __init__(self, seeds=[None], **kwargs):
         super(EnsembleModel, self).__init__(**kwargs)
         self.grad_model = None
         self.seeds = seeds
         self.weight_generators = None
+        self.mask_id = 0
         
     def gen_mask(self, seed):
-        np.random.seed(seed)
+        rng = np.random.RandomState()
+        if seed is not None:
+            #np.random.seed(seed)
+            rng.seed(seed)
         for layer in self.layers:
             if 'gen_mask' in dir(layer):
-                layer.gen_mask()
+                layer.gen_mask(rng)
         
-    def set_weight_generators(self):
-        self.weight_generators = [np.random.RandomState(seed) for seed in self.seeds]
+    # def set_weight_generators(self):
+    #     self.weight_generators = [np.random.RandomState(seed) for seed in self.seeds]
+
+    def reset_mask_id(self):
+        self.mask_id = 0        
 
     def train_on_batch(self, x, y, **kwargs):   
-        n_data = len(y)     
-        losses = []
-        
-        for j in range(len(self.seeds)):
-            self.gen_mask(self.seeds[j])
-            weight = self.weight_generators[j].dirichlet(np.ones(n_data))*n_data               
-            loss = super(EnsembleModel,self).train_on_batch(x, y, sample_weight=weight) 
-            losses.append(loss) 
-        
-        return np.mean(losses)
-
-    def test_on_batch(self, x, y, **kwargs):   
-        n_data = len(y)     
-        losses = []
-        
-        for j in range(len(self.seeds)):
-            self.gen_mask(self.seeds[j])
-            weight = self.weight_generators[j].dirichlet(np.ones(n_data))*n_data              
-            loss = super(EnsembleModel,self).test_on_batch(x, y, sample_weight=weight) 
-            losses.append(loss) 
-        
-        return np.mean(losses)
+        seed = np.random.choice(self.seeds)      
+#        seed = self.seeds[self.mask_id]
+#        self.mask_id += 1
+#        self.mask_id = self.mask_id%len(self.seeds)
+        self.gen_mask(seed)
+        loss = super(EnsembleModel,self).train_on_batch(x, y, **kwargs)
+        return loss
+        # n_data = len(y)     
+        # losses = []
+        # 
+        # for j in range(len(self.seeds)):
+        #     self.gen_mask(self.seeds[j])
+        #     weight = self.weight_generators[j].dirichlet(np.ones(n_data))*n_data
+        #     loss = super(EnsembleModel,self).train_on_batch(x, y, sample_weight=weight) 
+        #     losses.append(loss) 
+        # 
+        # return np.mean(losses)
     
-    # def fit(self, x, y, n_epoch=25, batch_size=50):
-    #     n_data = len(x)
-    #     n_batch = int(np.ceil(float(n_data) / batch_size))
-    #     seeds = self.seeds
-    #     n_set = len(self.seeds)
-    #     training_order = range(n_data)
-    #     np.random.shuffle(training_order)  
-    #     
-    #     for i in range(n_epoch):
-    #         for j in range(n_set):
-    #             set_training_start = time.time()
-    #             RandomMask.gen_masks(seeds[j])
-    #             np.random.seed(seeds[j])
-    #             weights = np.random.dirichlet(np.ones(n_data), 1)[0]            
-    #             losses = []
-    #             for k in range(n_batch):
-    #                 
-    #                 start = k*batch_size
-    #                 end = min(start + batch_size, n_data)
-    #                 
-    #                 x_batch = x[training_order[start:end]]
-    #                 y_batch = y[training_order[start:end]]
-    #                 weights_batch = weights[training_order[start:end]]            
-    #                                     
-    #                 loss = self.train_on_batch(x_batch, y_batch, weights_batch) 
-    #                 losses.append(loss)
-    #             set_training_end = time.time()   
-    #                           
-    #             print 'epoch {} set {} loss {} time {}'.format(i, j, np.mean(losses), set_training_end - set_training_start)      
+    def test_on_batch(self, x, y, **kwargs):   
+        seed = np.random.choice(self.seeds)
+#        seed = self.seeds[self.mask_id]
+#        self.mask_id += 1
+#        self.mask_id = self.mask_id%len(self.seeds)
+        self.gen_mask(seed)
+        loss = super(EnsembleModel,self).test_on_batch(x, y, **kwargs)
+        return loss
+    
+    def test_model(self, x, y, **kwargs):   
+        Y = []
+        for j in range(len(self.seeds)):
+            print 'mask {}'.format(j)
+            self.gen_mask(self.seeds[j])
+            Y += [super(EnsembleModel,self).predict(x, **kwargs)] 
+        Y_avg = np.mean(Y,axis=0)
+    #    Y_var = 1.0/tou + np.var(Y,axis=0)
+        Y_var = np.var(Y,axis=0)
+        f = open('test_output.txt','w')
+        for i, Y_true in enumerate(y):
+            f.write('{} {} {}\n'.format(y[i], Y_avg[i][0], Y_var[i][0]))
 
-    def predict(self, x, **kwargs):
+    def predict(self, x, std=False, **kwargs):
         Y = []
         for j in range(len(self.seeds)):
             self.gen_mask(self.seeds[j])
             Y += [super(EnsembleModel,self).predict(x, **kwargs)] 
         Y_avg = np.mean(Y,axis=0)
-    #    Y_var = 1.0/tou + np.var(Y,axis=0)
-        #Y_var = np.var(Y,axis=0)
-        return Y_avg  
-    
-    def variance(self, x, **kwargs):
-        Y = []
-        for j in range(len(self.seeds)):
-            self.gen_mask(self.seeds[j])
-            Y += [super(EnsembleModel,self).predict(x, **kwargs)] 
-    #    Y_avg = np.mean(Y,axis=0)
-    #    Y_var = 1.0/tou + np.var(Y,axis=0)
-        Y_var = np.var(Y,axis=0)
-        return Y_var       
+        if std:
+            Y_std = np.std(Y,axis=0)
+            return Y_avg, Y_std
+        return Y_avg   
     
     # def variance_grad(self, x):
     #     if self.grad_model is None:
@@ -161,10 +146,11 @@ class RandomMask(Layer):
         x *= self.mask
         return x
     
-    def gen_mask(self):
+    def gen_mask(self, rng):
         retain_prob = 1.0 - self.dropout_rate
         size = K.int_shape(self.mask)
-        K.set_value(self.mask,np.random.binomial(n=1,p=retain_prob,size=size).astype(np.float32))
+        K.set_value(self.mask,rng.binomial(n=1,p=retain_prob,size=size).astype(np.float32))
+#        K.set_value(self.mask,np.random.binomial(n=1,p=retain_prob,size=size).astype(np.float32))
     
     def get_config(self):
         config = {'dropout_rate': self.dropout_rate}
